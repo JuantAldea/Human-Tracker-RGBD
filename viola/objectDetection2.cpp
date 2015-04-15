@@ -9,7 +9,7 @@
 
 #include <iostream>
 #include <stdio.h>
-
+#include <ctime>
 using namespace std;
 using namespace cv;
 
@@ -20,15 +20,16 @@ typedef vector<eye> eyes;
 typedef pair<face_shape, eyes> face;
 typedef vector<face> faces;
 
-void print_faces(const faces &detected_faces, Mat &frame, float scale);
+void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height);
+Mat calculate_image_mask(const Mat& image, uint16_t depth, uint16_t delta);
 faces detect_faces(const Mat &frame);
 vector<Rect> detect_upper_bodies(const Mat &frame);
 void CannyThreshold(int, void* io);
 
 
-String face_cascade_name = "lbpcascade_frontalface.xml";
-String eyes_cascade_name = "haarcascade_eye_tree_eyeglasses.xml";
-String upperbodycascade_name = "haarcascade_upperbody.xml";
+String face_cascade_name = "cascades/lbpcascade_frontalface.xml";
+String eyes_cascade_name = "cascades/haarcascade_eye_tree_eyeglasses.xml";
+String upperbodycascade_name = "cascades/haarcascade_upperbody.xml";
 
 CascadeClassifier face_cascade;
 CascadeClassifier eyes_cascade;
@@ -41,6 +42,8 @@ int kernel_size = 3;
 
 RNG rng(12345);
 
+const float scale_width = 640/1280.;
+const float scale_height = 480/1024.;
 
 int main(void)
 {
@@ -59,6 +62,7 @@ int main(void)
         return -1;
     };
 
+    namedWindow("Color image FULL RES", CV_WINDOW_AUTOSIZE);
     namedWindow("Color image", CV_WINDOW_AUTOSIZE);
     //namedWindow("Grey canny", CV_WINDOW_AUTOSIZE);
     //namedWindow("Disparity map", CV_WINDOW_AUTOSIZE);
@@ -68,10 +72,15 @@ int main(void)
     //namedWindow("Depth image", CV_WINDOW_AUTOSIZE);
     //namedWindow("Point cloud map", CV_WINDOW_AUTOSIZE);
     //namedWindow("Grey image", CV_WINDOW_AUTOSIZE);
+    namedWindow("Valid depth pixels", CV_WINDOW_AUTOSIZE);
+    namedWindow("color_image_masked_valid_depth", CV_WINDOW_AUTOSIZE);
+    namedWindow("ROI1", CV_WINDOW_AUTOSIZE);
+    namedWindow("ROI2", CV_WINDOW_AUTOSIZE);
 
     VideoCapture capture(CV_CAP_OPENNI);
     capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
 
+    Mat color_frame_SXGA;
     Mat color_frame;
     Mat grey_frame;
     Mat depth_frame;
@@ -80,6 +89,9 @@ int main(void)
     Mat disparity_map_canny;
     Mat disparity_map_eq;
     Mat disparity_map_eq_canny;
+    Mat valid_depth_pixels;
+    Mat valid_depth_pixels_3_channels;
+    Mat color_image_masked_valid_depth;
 
     pair<Mat*, Mat*> io(&grey_frame, &grey_canny);
     pair<Mat*, Mat*> io2(&disparity_map, &disparity_map_canny);
@@ -95,23 +107,99 @@ int main(void)
 
     while (true) {
         capture.grab();
-        capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
+        capture.retrieve(color_frame_SXGA, CV_CAP_OPENNI_BGR_IMAGE);
         capture.retrieve(grey_frame, CV_CAP_OPENNI_GRAY_IMAGE);
         capture.retrieve(disparity_map, CV_CAP_OPENNI_DISPARITY_MAP);
-        //capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
+        capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
+        capture.retrieve(valid_depth_pixels, CV_CAP_OPENNI_VALID_DEPTH_MASK);
         //capture.retrieve(point_cloud_map, CV_CAP_OPENNI_POINT_CLOUD_MAP);
+        
+        resize(color_frame_SXGA, color_frame, disparity_map.size());
+        color_image_masked_valid_depth.create(color_frame.size(), color_frame.type());
 
-        auto detected_faces = detect_faces(color_frame);
-        print_faces(detected_faces, color_frame, 1);
+        Mat original = color_frame.clone();
+
+        auto detected_faces = detect_faces(color_frame_SXGA);
+        
+        for(auto face : detected_faces){
+            Rect rectangle = face.first;
+            Rect rectangle_scaled(rectangle.x * scale_width + rectangle.width * scale_width * 0.05, rectangle.y * scale_height, rectangle.width * scale_width * 0.90, rectangle.height * scale_height);
+            Mat faceROI = color_frame(rectangle_scaled);
+            Mat faceROI_disparity = disparity_map(rectangle_scaled);
+            Mat faceROI_depth = depth_frame(rectangle_scaled);
+            Mat faceROI_valid_depth = valid_depth_pixels(rectangle_scaled);
+
+            imshow("ROI1", faceROI);
+            imshow("ROI2", faceROI_disparity);
+            uint pixel_count = 0;
+            uint32_t depth_sum = 0;
+            uint32_t disparity_sum = 0;
+            
+            int channels = faceROI_disparity.channels();
+            int nRows = faceROI_disparity.rows;
+            int nCols = faceROI_disparity.cols * channels;
+            int total_pixels = nRows * nCols;
+            for(int  i = 0; i < nRows; ++i){
+                const uchar* p_disparity = faceROI_disparity.ptr<uchar>(i);
+                const ushort* p_depth = faceROI_depth.ptr<ushort>(i);
+                const uchar* p_valid_depth = faceROI_valid_depth.ptr<uchar>(i);
+                for (int j = 0; j < nCols; ++j){
+                    disparity_sum += (p_valid_depth[j] & 0x1) * p_disparity[j];
+                    depth_sum += (p_valid_depth[j] & 0x1) * p_depth[j];
+                    pixel_count += (p_valid_depth[j] & 0x1);
+                }
+            }
+            cout << pixel_count << ' ' << total_pixels << ' ' << pixel_count/float(total_pixels) << endl;
+            if (pixel_count > (total_pixels * 0.6)){
+                cout << "average disparity " << disparity_sum / float(pixel_count) << endl;
+                cout << "average distance " << depth_sum / float(pixel_count) << endl;
+            }else{
+                cout << "invalid data" << endl;
+            }
+        }
+
+        bitwise_not(valid_depth_pixels, valid_depth_pixels);
+        Mat channels[] =  {valid_depth_pixels, valid_depth_pixels, valid_depth_pixels};
+        merge(channels, 3, valid_depth_pixels_3_channels);
+        bitwise_or(color_frame, valid_depth_pixels_3_channels, color_image_masked_valid_depth);
+        bitwise_not(valid_depth_pixels, valid_depth_pixels);
+
+        equalizeHist(disparity_map, disparity_map_eq);
+        
+        int c = waitKey(10);
+        if ((char)c == 'c') {
+            break;
+        } else if (char(c) == 's') {
+            vector<int> compression_params;
+            compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+            compression_params.push_back(9);
+            time_t now;
+            char date_str[20];
+            now = time(NULL);
+            //strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
+            //imwrite(date_str, disparity_map, compression_params);
+            strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
+            imwrite(date_str, disparity_map_eq, compression_params);
+            cout << "Frame saved to " << date_str << endl;
+        }
+
+
 
         //CannyThreshold(0, &io);
         //CannyThreshold(0, &io2);
 
-        equalizeHist(disparity_map, disparity_map_eq);
-        CannyThreshold(0, &io3);
-        print_faces(detected_faces, disparity_map_eq, 0.5);
-        print_faces(detected_faces, disparity_map_eq_canny, 0.5);
+        //CannyThreshold(0, &io3);
+    
 
+        print_faces(detected_faces, color_frame_SXGA, 1, 1);
+        print_faces(detected_faces, color_frame, scale_width, scale_height);
+        print_faces(detected_faces, color_image_masked_valid_depth, scale_width, scale_height);
+        print_faces(detected_faces, disparity_map_eq, scale_width, scale_height);
+        print_faces(detected_faces, disparity_map_eq_canny, scale_width, scale_height);
+        ///calculate_image_mask(depth_frame, 100, 10);
+
+        //mask color with valid depth
+        
 
         //vector<Vec3f> circles;
         //blur(grey_frame, grey_frame, Size(3, 3));
@@ -132,38 +220,76 @@ int main(void)
         }
 
         */
+        imshow("Color image FULL RES", color_frame_SXGA);
+        imshow("Color image", color_frame);
         //imshow("Disparity map", disparity_map);
         imshow("Disparity map eq", disparity_map_eq);
         //imshow("Disparity map canny", disparity_map_canny);
-        imshow("Disparity map canny eq", disparity_map_eq_canny);
-        imshow("Color image", color_frame);
+        //imshow("Disparity map canny eq", disparity_map_eq_canny);
+        imshow("Valid depth pixels", valid_depth_pixels);
+        imshow("color_image_masked_valid_depth", color_image_masked_valid_depth);
+
         //imshow("Grey canny", grey_canny);
 
         //imshow("Depth map", depth_frame);
         //imshow("Point cloud map", point_cloud_map);
         //imshow("Grey image", grey_frame);
 
-        int c = waitKey(10);
-        if ((char)c == 'c') {
-            break;
-        }
-
     }
     return 0;
 }
 
-void print_faces(const faces &detected_faces, Mat &frame, float scale)
+
+
+Mat calculate_image_mask(const Mat& image, uint16_t depth, uint16_t delta)
+{
+    Mat mask;
+
+    mask.create(image.size(), image.type());
+    cout << "profundidad " <<  image.depth() << endl;
+    int channels = image.channels();
+
+    int nRows = image.rows;
+    int nCols = image.cols * channels;
+
+    if (image.isContinuous()) {
+        nCols *= nRows;
+        nRows = 1;
+    }
+        
+    cout << "(" + depth << delta << ")" << endl;
+
+    /*
+    uint16_t in_range_mask = 0xffff;
+    uint16_t out_range_mask = 0x0;
+    for (int i = 0; i < nRows; ++i) {
+        uint *image_ptr = image.ptr<CV_16UC1>(i);
+        uint *mask_ptr  = mask.ptr<CV_16UC1>(i);
+        for (int j = 0; j < nCols; ++j) {
+            mask_ptr[j] = std::abs(image_ptr[j] - depth) <= delta ? in_range_mask : out_range_mask;
+        }
+    }
+    */
+
+    return mask;
+}
+
+
+
+void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height)
 {
     for (auto detected_face : detected_faces) {
         face_shape &f = detected_face.first;
         eyes &e = detected_face.second;
-        Point center((f.x + f.width / 2) * scale, (f.y + f.height / 2) * scale);
-        ellipse(frame, center, Size((f.width / 2) * scale, (f.height / 2) * scale), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
+        Point center((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (f.y + f.height / 2) * scale_height);
+        ellipse(frame, center, Size((f.width / 2) * scale_width * 0.8, (f.height / 2) * scale_height), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
         for (size_t j = 0; j < e.size(); j++) {
-            Point eye_center((f.x + e[j].x + e[j].width / 2) * scale, (f.y + e[j].y + e[j].height / 2) * scale);
-            int radius = cvRound((e[j].width + e[j].height) * 0.25 * scale);
+            Point eye_center((f.x + e[j].x + e[j].width / 2) * scale_width, (f.y + e[j].y + e[j].height / 2) * scale_height);
+            int radius = cvRound((e[j].width + e[j].height) * 0.25 * scale_width);
             circle(frame, eye_center, radius, Scalar(255, 0, 255), 3, 8, 0);
         }
+        Point center2((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (300 + f.y + f.height / 2) * scale_height);
+        ellipse(frame, center2, Size((f.width / 2) * scale_width * 0.8, (f.height / 2) * scale_height), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
     }
 }
 
@@ -181,8 +307,6 @@ faces detect_faces(const Mat &frame)
     for (size_t i = 0; i < faces.size(); i++) {
         Mat faceROI = frame_gray(faces[i]);
         std::vector<Rect> eyes;
-
-        //-- In each face, detect eyes
         eyes_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
         if (eyes.size() == 2) {
             detected_faces.push_back(face(faces[i], eyes));
@@ -201,8 +325,8 @@ vector<Rect> detect_upper_bodies(const Mat &frame)
     std::vector<Rect> upperbodies;
     upperbody_cascade.detectMultiScale(frame, upperbodies, 1.1, 2, 0, Size(110, 110));
     //for (size_t i = 0; i < upperbodies.size(); i++) {
-        //Point center(upperbodies[i].x + upperbodies[i].width / 2, upperbodies[i].y + upperbodies[i].height / 2);
-        //ellipse(frame, center, Size(upperbodies[i].width / 2, upperbodies[i].height / 2), 0, 0, 360, Scalar(500, 0, 0), 2, 8, 0);
+    //Point center(upperbodies[i].x + upperbodies[i].width / 2, upperbodies[i].y + upperbodies[i].height / 2);
+    //ellipse(frame, center, Size(upperbodies[i].width / 2, upperbodies[i].height / 2), 0, 0, 360, Scalar(500, 0, 0), 2, 8, 0);
     //}
     return upperbodies;
 
