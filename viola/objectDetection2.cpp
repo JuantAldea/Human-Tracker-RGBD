@@ -171,9 +171,10 @@ int main(void)
 
             for(int  i = 0; i < nRows; ++i){
                 const ushort* p_depth = depth_frame.ptr<ushort>(i);
+                const uchar* p_valid_depth = valid_depth_pixels.ptr<uchar>(i);
                 uchar* p_depth_mask = depth_mask.ptr<uchar>(i);
                 for (int j = 0; j < nCols; ++j){
-                    p_depth_mask[j] = (std::abs(p_depth[j] - depth_average) < 200) * 255;
+                    p_depth_mask[j] = (p_valid_depth[j] & 0x1) * (std::abs(p_depth[j] - depth_average) < 200) * 255;
                 }
             }
 
