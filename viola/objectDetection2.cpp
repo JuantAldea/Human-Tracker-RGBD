@@ -76,6 +76,7 @@ int main(void)
     namedWindow("color_image_masked_valid_depth", CV_WINDOW_AUTOSIZE);
     namedWindow("ROI1", CV_WINDOW_AUTOSIZE);
     namedWindow("ROI2", CV_WINDOW_AUTOSIZE);
+    namedWindow("DEPTH MASK", CV_WINDOW_AUTOSIZE);
 
     VideoCapture capture(CV_CAP_OPENNI);
     capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
@@ -121,6 +122,10 @@ int main(void)
 
         auto detected_faces = detect_faces(color_frame_SXGA);
         
+        uint pixel_count = 0;
+        uint32_t depth_sum = 0;
+        uint32_t disparity_sum = 0;        
+        
         for(auto face : detected_faces){
             Rect rectangle = face.first;
             Rect rectangle_scaled(rectangle.x * scale_width + rectangle.width * scale_width * 0.05, rectangle.y * scale_height, rectangle.width * scale_width * 0.90, rectangle.height * scale_height);
@@ -131,9 +136,7 @@ int main(void)
 
             imshow("ROI1", faceROI);
             imshow("ROI2", faceROI_disparity);
-            uint pixel_count = 0;
-            uint32_t depth_sum = 0;
-            uint32_t disparity_sum = 0;
+
             
             int channels = faceROI_disparity.channels();
             int nRows = faceROI_disparity.rows;
@@ -157,7 +160,32 @@ int main(void)
                 cout << "invalid data" << endl;
             }
         }
+        
 
+        {
+            float depth_average = depth_sum / float(pixel_count);
+            int nRows = depth_frame.rows;
+            int nCols = depth_frame.cols * depth_frame.channels();
+            
+            Mat depth_mask(valid_depth_pixels.size(), valid_depth_pixels.type());
+
+            for(int  i = 0; i < nRows; ++i){
+                const ushort* p_depth = depth_frame.ptr<ushort>(i);
+                uchar* p_depth_mask = depth_mask.ptr<uchar>(i);
+                for (int j = 0; j < nCols; ++j){
+                    p_depth_mask[j] = (std::abs(p_depth[j] - depth_average) < 200) * 255;
+                }
+            }
+
+            Mat color_frame_depth_masked;
+            Mat depth_mask_3_channels;
+            bitwise_not(depth_mask, depth_mask);
+            Mat channels[] =  {depth_mask, depth_mask, depth_mask};
+            merge(channels, 3, depth_mask_3_channels);
+            bitwise_or(color_frame, depth_mask_3_channels, color_frame_depth_masked);
+            imshow("DEPTH MASK", color_frame_depth_masked);
+        }
+        
         bitwise_not(valid_depth_pixels, valid_depth_pixels);
         Mat channels[] =  {valid_depth_pixels, valid_depth_pixels, valid_depth_pixels};
         merge(channels, 3, valid_depth_pixels_3_channels);
