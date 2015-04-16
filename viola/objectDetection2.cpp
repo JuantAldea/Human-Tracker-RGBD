@@ -8,6 +8,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 
 #include <iostream>
+#include <sstream>
 #include <stdio.h>
 #include <ctime>
 using namespace std;
@@ -19,6 +20,10 @@ typedef Rect eye;
 typedef vector<eye> eyes;
 typedef pair<face_shape, eyes> face;
 typedef vector<face> faces;
+
+void print_chests(const faces &detected_faces, Mat &frame, float scale_width, float scale_height, uint32_t depth);
+Point chest_position (const Point head_center, const uint32_t depth);
+vector<Rect> chest_position_from_face_position(const faces &detected_faces, const uint32_t depth);
 
 void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height);
 Mat calculate_image_mask(const Mat& image, uint16_t depth, uint16_t delta);
@@ -76,10 +81,14 @@ int main(void)
     namedWindow("color_image_masked_valid_depth", CV_WINDOW_AUTOSIZE);
     namedWindow("ROI1", CV_WINDOW_AUTOSIZE);
     namedWindow("ROI2", CV_WINDOW_AUTOSIZE);
+    namedWindow("ROI3", CV_WINDOW_AUTOSIZE);
+
     namedWindow("DEPTH MASK", CV_WINDOW_AUTOSIZE);
 
     VideoCapture capture(CV_CAP_OPENNI);
     capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
+    cout << "REGISTRATION " << capture.get( CV_CAP_PROP_OPENNI_REGISTRATION ) << endl;
+    capture.set(CV_CAP_PROP_OPENNI_REGISTRATION, 1);
 
     Mat color_frame_SXGA;
     Mat color_frame;
@@ -160,7 +169,6 @@ int main(void)
                 cout << "invalid data" << endl;
             }
         }
-        
 
         {
             float depth_average = depth_sum / float(pixel_count);
@@ -168,13 +176,15 @@ int main(void)
             int nCols = depth_frame.cols * depth_frame.channels();
             
             Mat depth_mask(valid_depth_pixels.size(), valid_depth_pixels.type());
-
+            float average_disparity_meters = depth_sum / float(pixel_count) / 1000.0;
+            float depth_step_resolution_mm = (2.73 * average_disparity_meters * average_disparity_meters + 0.74 * average_disparity_meters - 0.58);
+            cout << "resolution " << depth_step_resolution_mm << endl;
             for(int  i = 0; i < nRows; ++i){
                 const ushort* p_depth = depth_frame.ptr<ushort>(i);
                 const uchar* p_valid_depth = valid_depth_pixels.ptr<uchar>(i);
                 uchar* p_depth_mask = depth_mask.ptr<uchar>(i);
                 for (int j = 0; j < nCols; ++j){
-                    p_depth_mask[j] = (p_valid_depth[j] & 0x1) * (std::abs(p_depth[j] - depth_average) < 200) * 255;
+                    p_depth_mask[j] = (p_valid_depth[j] & 0x1) * (std::abs(p_depth[j] - depth_average) < (100 * depth_step_resolution_mm * 0.5)) * 255;
                 }
             }
 
@@ -195,37 +205,63 @@ int main(void)
 
         equalizeHist(disparity_map, disparity_map_eq);
         
-        int c = waitKey(10);
-        if ((char)c == 'c') {
-            break;
-        } else if (char(c) == 's') {
-            vector<int> compression_params;
-            compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
-            compression_params.push_back(9);
-            time_t now;
-            char date_str[20];
-            now = time(NULL);
-            //strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
-            //imwrite(date_str, disparity_map, compression_params);
-            strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
-            imwrite(date_str, disparity_map_eq, compression_params);
-            cout << "Frame saved to " << date_str << endl;
-        }
-
-
-
         //CannyThreshold(0, &io);
         //CannyThreshold(0, &io2);
-
         //CannyThreshold(0, &io3);
     
-
         print_faces(detected_faces, color_frame_SXGA, 1, 1);
         print_faces(detected_faces, color_frame, scale_width, scale_height);
         print_faces(detected_faces, color_image_masked_valid_depth, scale_width, scale_height);
         print_faces(detected_faces, disparity_map_eq, scale_width, scale_height);
         print_faces(detected_faces, disparity_map_eq_canny, scale_width, scale_height);
+        print_chests(detected_faces, color_frame_SXGA, 1, 1, depth_sum / float(pixel_count));
+        auto chests = chest_position_from_face_position(detected_faces, depth_sum / float(pixel_count));
+        if (chests.size()){
+            int corner_x = std::max(0, chests[0].x);
+            int corner_y = chests[0].y;
+            if (corner_y < color_frame_SXGA.size().height){
+                ellipse(color_frame_SXGA, Point(corner_x, corner_y), Size(5, 5), 0, 0, 360, Scalar(0, 255, 0), 2, 8, 0);
+                int width = chests[0].width;
+                if (chests[0].x < 0){
+                    width = chests[0].width - chests[0].x;
+                }else if(chests[0].x + chests[0].width >= color_frame_SXGA.size().width){
+                    width = color_frame_SXGA.size().width - chests[0].x;
+                }
+                
+                int height = chests[0].height;
+                if (chests[0].y + chests[0].height >= color_frame_SXGA.size().height){
+                    height = color_frame_SXGA.size().height - chests[0].y;
+                }else{
+
+                }
+                cout << color_frame_SXGA.size().width << ' ' << color_frame_SXGA.size().height << endl;
+                cout <<  chests[0].x << ' ' <<  chests[0].y << ' ' <<  chests[0].width << ' ' <<  chests[0].height << endl;
+                cout << corner_x << ' ' << corner_y << ' ' << width << ' ' << height << endl;
+                Mat roi_chest = color_frame_SXGA(Rect(corner_x, corner_y, width, height));
+                imshow("ROI3", roi_chest);
+            }
+        }
+
+        
         ///calculate_image_mask(depth_frame, 100, 10);
+
+        int c = waitKey(10);
+        if ((char)c == 'c') {
+            break;
+        } else if (char(c) == 's' || detected_faces.size() * 0) {
+            vector<int> compression_params;
+            compression_params.push_back(CV_IMWRITE_PNG_COMPRESSION);
+            compression_params.push_back(9);
+            time_t now;
+            char date_str[100];
+            now = time(NULL);
+            //strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
+            //imwrite(date_str, disparity_map, compression_params);
+            sprintf(date_str, "./imgs/%lu.png", now);
+            //strftime(date_str, 20, "./imgs/%H-%M-%S.png", gmtime(&now));
+            imwrite(date_str, color_frame_SXGA, compression_params);
+            cout << "Frame saved to " << date_str << endl;
+        }
 
         //mask color with valid depth
         
@@ -249,6 +285,12 @@ int main(void)
         }
 
         */
+        {
+            Mat depth_frame_3_channels(color_frame.size(), color_frame.type());
+            Mat channels[] =  {depth_frame, depth_frame, depth_frame};
+            merge(channels, 3, depth_frame_3_channels);
+            addWeighted(color_frame, 0.99, depth_frame_3_channels, 0.01, 0.0, color_frame, color_frame.type());
+        }
         imshow("Color image FULL RES", color_frame_SXGA);
         imshow("Color image", color_frame);
         //imshow("Disparity map", disparity_map);
@@ -269,6 +311,10 @@ int main(void)
 }
 
 
+inline bool point_within_ellipse(const Point &point, const Point &center, const int radi_x, const int radi_y)
+{
+    return (((point.x - center.x) * (point.x - center.x)) / (radi_x * radi_x) + ((point.y - center.y) * (point.y - center.y)) / (radi_y * radi_y)) < 1;
+}
 
 Mat calculate_image_mask(const Mat& image, uint16_t depth, uint16_t delta)
 {
@@ -303,7 +349,28 @@ Mat calculate_image_mask(const Mat& image, uint16_t depth, uint16_t delta)
     return mask;
 }
 
+vector<Rect> chest_position_from_face_position(const faces &detected_faces, const uint32_t depth)
+{
+    vector<Rect> chests;
+    for (auto detected_face : detected_faces) {
+        const face_shape &f = detected_face.first;
+        const Point center((f.x + f.width / 2 + f.width * 0.50 * 0.05), (f.y + f.height / 2));
+        const Point chest_center = chest_position(center, depth);
+        const Point roi_corner(chest_center.x - 1.5 * f.width / 2, chest_center.y - 1.75 * f.height / 2);
+        const Size  roi_size(f.width*1.5*0.8, f.height*3.5/2.0);
+        chests.push_back(Rect(roi_corner, roi_size));
+    }
+    return chests;
+}
 
+Point chest_position (const Point head_center, const uint32_t depth)
+{
+    const float f = 583;
+    const float delta_y = 800;
+    Point chest(head_center.x, (head_center.y * depth + f * delta_y) / depth);
+    cout << "FACE " << head_center.x << ' ' << head_center.y << " CHEST " << chest.x << ' ' << chest.y << endl;
+    return chest;
+}
 
 void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height)
 {
@@ -312,13 +379,25 @@ void print_faces(const faces &detected_faces, Mat &frame, float scale_width, flo
         eyes &e = detected_face.second;
         Point center((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (f.y + f.height / 2) * scale_height);
         ellipse(frame, center, Size((f.width / 2) * scale_width * 0.8, (f.height / 2) * scale_height), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
+        ellipse(frame, center, Size(5, 5), 0, 0, 360, Scalar(0, 255, 0), 2, 8, 0);
         for (size_t j = 0; j < e.size(); j++) {
             Point eye_center((f.x + e[j].x + e[j].width / 2) * scale_width, (f.y + e[j].y + e[j].height / 2) * scale_height);
             int radius = cvRound((e[j].width + e[j].height) * 0.25 * scale_width);
             circle(frame, eye_center, radius, Scalar(255, 0, 255), 3, 8, 0);
         }
-        Point center2((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (300 + f.y + f.height / 2) * scale_height);
-        ellipse(frame, center2, Size((f.width / 2) * scale_width * 0.8, (f.height / 2) * scale_height), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
+    }
+}
+
+void print_chests(const faces &detected_faces, Mat &frame, float scale_width, float scale_height, uint32_t depth)
+{
+    for (auto detected_face : detected_faces) {
+        face_shape &f = detected_face.first;
+        Point center((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (f.y + f.height / 2) * scale_height);
+        ellipse(frame, center, Size((f.width / 2) * scale_width * 0.8, (f.height / 2) * scale_height), 0, 0, 360, Scalar(0, 255, 0), 2, 8, 0);
+        ellipse(frame, center, Size(5, 5), 0, 0, 360, Scalar(0, 255, 0), 2, 8, 0);
+        Point chest_center = chest_position(center, depth);
+        ellipse(frame, chest_center, Size((1.5 * f.width / 2) * scale_width * 0.8, (1.75 * f.height / 2) * scale_height), 0, 0, 360, Scalar(255, 0, 0), 2, 8, 0);
+        ellipse(frame, chest_center, Size(5, 5), 0, 0, 360, Scalar(0, 255, 0), 2, 8, 0);
     }
 }
 
