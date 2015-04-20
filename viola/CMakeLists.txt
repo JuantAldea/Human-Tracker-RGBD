@@ -17,6 +17,7 @@ endif()
 message("${CMAKE_CXX_FLAGS}")
 
 find_package(OpenCV REQUIRED)
+find_package(MRPT REQUIRED)
 
 target_link_libraries(objectDetection ${OpenCV_LIBS})
 target_link_libraries(objectDetection2 ${OpenCV_LIBS})
