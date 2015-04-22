@@ -2,6 +2,7 @@ project(va-05)
 cmake_minimum_required(VERSION 2.8)
 add_executable(objectDetection  objectDetection.cpp)
 add_executable(objectDetection2  objectDetection2.cpp)
+add_executable(squareDetection  squareDetection.cpp)
 add_executable(openni_capture openni_capture.cpp)
 add_executable(hog peopledetect.cpp)
 
@@ -21,6 +22,7 @@ find_package(MRPT REQUIRED)
 
 target_link_libraries(objectDetection ${OpenCV_LIBS})
 target_link_libraries(objectDetection2 ${OpenCV_LIBS})
+target_link_libraries(squareDetection ${OpenCV_LIBS})
 target_link_libraries(openni_capture  ${OpenCV_LIBS})
 target_link_libraries(hog ${OpenCV_LIBS})
 
