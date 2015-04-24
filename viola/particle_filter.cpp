@@ -11,16 +11,22 @@
 //  http://www.mrpt.org/Kalman_Filters
 // ------------------------------------------------------
 
-#include <mrpt/bayes/CParticleFilterData.h>
 
+#include <mrpt/gui/CDisplayWindow.h>
 #include <mrpt/gui/CDisplayWindowPlots.h>
 #include <mrpt/random.h>
 #include <mrpt/system/os.h>
 #include <mrpt/system/threads.h>
 #include <mrpt/math/wrap2pi.h>
 #include <mrpt/math/distributions.h>
+#include <mrpt/bayes/CParticleFilterData.h>
+
 #include <mrpt/obs/CSensoryFrame.h>
-#include <mrpt/obs/CObservationBearingRange.h>
+#include <mrpt/obs/CObservationImage.h>
+#include <mrpt/utils/CSerializable.h>
+
+#include <mrpt/otherlibs/do_opencv_includes.h>
+#include "CObservationImageWithModel.h"
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -48,45 +54,31 @@ using namespace std;
 // ---------------------------------------------------------------
 //      Implementation of the system models as a Particle Filter
 // ---------------------------------------------------------------
-struct CParticleData {
+struct CImageParticleData {
     float x, y, vx, vy; // Vehicle state (position & velocities)
 };
 
-class CRangeBearingParticleFilter :
-    public mrpt::bayes::CParticleFilterData<CParticleData>,
-    public mrpt::bayes::CParticleFilterDataImpl<CRangeBearingParticleFilter, mrpt::bayes::CParticleFilterData<CParticleData>::CParticleList>
+class CImageParticleFilter :
+    public mrpt::bayes::CParticleFilterData<CImageParticleData>,
+    public mrpt::bayes::CParticleFilterDataImpl<CImageParticleFilter, mrpt::bayes::CParticleFilterData<CImageParticleData>::CParticleList>
 {
 public:
-
-    /** Update the m_particles, predicting the posterior of robot pose and map after a movement command.
-     *  This method has additional configuration parameters in "options".
-     *  Performs the update stage of the RBPF, using the sensed Sensorial Frame:
-     *
-     *   \param action This is a pointer to CActionCollection, containing the pose change the robot has been commanded.
-     *   \param observation This must be a pointer to a CSensoryFrame object, with robot sensed observations.
-     *
-     * \sa options
-     */
     void  prediction_and_update_pfStandardProposal(
-        const mrpt::obs::CActionCollection  * action,
-        const mrpt::obs::CSensoryFrame      * observation,
-        const bayes::CParticleFilter::TParticleFilterOptions &PF_options);
+        const mrpt::obs::CActionCollection*,
+        const mrpt::obs::CSensoryFrame      *observation,
+        const bayes::CParticleFilter::TParticleFilterOptions&);
 
-    void initializeParticles(size_t numParticles);
+    void initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y, const pair<float, float> v_x, const pair<float, float> v_y);
 
     void getMean(float &x, float &y, float &vx, float &vy);
 };
 
-
-// ------------------------------------------------------
-//              TestBayesianTracking
-// ------------------------------------------------------
 void TestBayesianTracking()
 {
     randomGenerator.randomize();
 
     CDisplayWindowPlots winPF("Tracking - Particle Filter", 450, 400);
-
+    CDisplayWindow image("image");
     winPF.setPos(480, 10);
 
     winPF.axis(-2, 20, -10, 10);
@@ -102,38 +94,38 @@ void TestBayesianTracking()
     CParticleFilter PF;
     PF.m_options = PF_options;
 
-    CRangeBearingParticleFilter  particles;
-    particles.initializeParticles(NUM_PARTICLES);
+    CImageParticleFilter  particles;
+    particles.initializeParticles(NUM_PARTICLES, make_pair(0, 10), make_pair(0, 10), make_pair(0, 10), make_pair(0, 10));
     
 
     // Init. simulation:
     // -------------------------
-    float x = VEHICLE_INITIAL_X, y = VEHICLE_INITIAL_Y, phi = DEG2RAD(-180), v = VEHICLE_INITIAL_V, w = VEHICLE_INITIAL_W;
     float  t = 0;
 
+    cv::VideoCapture capture("output.mpg");
+
+    cv::Mat color_frame;
+    cv::Mat frame_color_hsv;
+
+    if (!capture.isOpened()) {
+        return;
+    }
+
+    
     while (winPF.isOpen() && !mrpt::system::os::kbhit()) {
-        // Update vehicle:
-        x += v * DELTA_TIME * (cos(phi) - sin(phi));
-        y += v * DELTA_TIME * (sin(phi) + cos(phi));
-        phi += w * DELTA_TIME;
-
-        v += 1.0f * DELTA_TIME * cos(t);
-        w -= 0.1f * DELTA_TIME * sin(t);
-
-        // Simulate noisy observation:
-        float realBearing = atan2(y, x);
-        float obsBearing = realBearing  + BEARING_SENSOR_NOISE_STD * randomGenerator.drawGaussian1D_normalized();
-        printf("Real/Simulated bearing: %.03f / %.03f deg\n", RAD2DEG(realBearing), RAD2DEG(obsBearing));
-
-        float realRange = sqrt(square(x) + square(y));
-        float obsRange = max(0.0, realRange  + RANGE_SENSOR_NOISE_STD * randomGenerator.drawGaussian1D_normalized());
-        printf("Real/Simulated range: %.03f / %.03f \n", realRange, obsRange);
-
+        // make an observation
+        
+        //frame.setFromIplImage(new IplImage(cv::Mat(cv::Mat::zeros(100, 100, CV_8UC1))));
+        capture.grab();
+        capture >> color_frame;
+        
         // Process with PF:
-        CSensoryFrame SF;
-        CObservationImagePtr obsImage = CObservationImage::Create();
-        obsImage->image = Mat::zeros(100, 100);
+        CObservationImageWithModelPtr obsImage =CObservationImageWithModel::Create();
+        obsImage->image = CImage(new IplImage(color_frame));
+        obsImage->model = cv::Mat::zeros(100, 100, CV_8UC1);
+        image.showImage(obsImage->image);
         // memory freed by SF.
+        CSensoryFrame SF;
         SF.insert(obsImage);
         // Process in the PF
         PF.executeOn(particles, NULL, &SF);
@@ -165,33 +157,21 @@ void TestBayesianTracking()
             winPF.plot(vx, vy, "g-4", "velocityPF");
         }
 
+        /*
         // Draw GT:
         winPF.plot(vector<float>(1, x), vector<float>(1, y), "k.8", "plot_GT");
 
         // Draw noisy observations:
         vector<float>  obs_x(2), obs_y(2);
-        obs_x[0] = obs_y[0] = 0;
-        obs_x[1] = obsRange * cos(obsBearing);
-        obs_y[1] = obsRange * sin(obsBearing);
-
         winPF.plot(obs_x, obs_y, "r", "plot_obs_ray");
-
+        */
         // Delay:
         mrpt::system::sleep((int)(DELTA_TIME * 1000));
         t += DELTA_TIME;
     }
 }
 
-/** Update the m_particles, predicting the posterior of robot pose and map after a movement command.
-*  This method has additional configuration parameters in "options".
-*  Performs the update stage of the RBPF, using the sensed Sensorial Frame:
-*
-*   \param action This is a pointer to CActionCollection, containing the pose change the robot has been commanded.
-*   \param observation This must be a pointer to a CSensoryFrame object, with robot sensed observations.
-*
-* \sa options
-*/
-void  CRangeBearingParticleFilter::prediction_and_update_pfStandardProposal(
+void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     const mrpt::obs::CActionCollection*,
     const mrpt::obs::CSensoryFrame *observation,
     const bayes::CParticleFilter::TParticleFilterOptions&)
@@ -209,42 +189,40 @@ void  CRangeBearingParticleFilter::prediction_and_update_pfStandardProposal(
 
     CObservationImagePtr obs = observation->getObservationByClass<CObservationImage>();
     ASSERT_(obs);
-    ASSERT_(!obs->image.empty());
-    Mat image = obs->image;
+    //ASSERT_(!obs->image.empty());
+    
+    CImage image = obs->image;
 
     // Update weights
     for (i = 0; i < N; i++) {
-        float predicted_range   = sqrt(square(m_particles[i].d->x) + square(m_particles[i].d->y));
-        float predicted_bearing = atan2(m_particles[i].d->y, m_particles[i].d->x);
-
-        m_particles[i].log_w +=
-            log(math::normalPDF(predicted_range - obsRange, 0, RANGE_SENSOR_NOISE_STD)) +
-            log(math::normalPDF(math::wrapToPi(predicted_bearing - obsBearing), 0, BEARING_SENSOR_NOISE_STD));
+        m_particles[i].log_w += 0;
+            //log(math::normalPDF(predicted_range - obsRange, 0, RANGE_SENSOR_NOISE_STD)) +
+            //log(math::normalPDF(math::wrapToPi(predicted_bearing - obsBearing), 0, BEARING_SENSOR_NOISE_STD));
     }
 
     // Resample is automatically performed by CParticleFilter when required.
 }
 
-void  CRangeBearingParticleFilter::initializeParticles(size_t  M)
+void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y, const pair<float, float> v_x, const pair<float, float> v_y)
 {
     clearParticles();
+    
     m_particles.resize(M);
-    for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
-        it->d = new CParticleData();
-    }
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
-        (*it).d->x  = randomGenerator.drawUniform(VEHICLE_INITIAL_X - 2.0f, VEHICLE_INITIAL_X + 2.0f);
-        (*it).d->y  = randomGenerator.drawUniform(VEHICLE_INITIAL_Y - 2.0f, VEHICLE_INITIAL_Y + 2.0f);
-
-        (*it).d->vx = randomGenerator.drawGaussian1D(-VEHICLE_INITIAL_V, 0.2f);
-        (*it).d->vy = randomGenerator.drawGaussian1D(0, 0.2f);
+        it->d = new CImageParticleData();
+        
+        it->d->x  = randomGenerator.drawGaussian1D(x.first, x.second);
+        it->d->y  = randomGenerator.drawGaussian1D(y.first, y.second);
+        
+        it->d->vx = randomGenerator.drawGaussian1D(v_x.first, v_x.second);
+        it->d->vy = randomGenerator.drawGaussian1D(v_y.first, v_y.second);
 
         it->log_w   = 0;
     }
 }
 
-void CRangeBearingParticleFilter::getMean(float &x, float &y, float &vx, float &vy)
+void CImageParticleFilter::getMean(float &x, float &y, float &vx, float &vy)
 {
     double sumW = 0;
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
@@ -253,14 +231,17 @@ void CRangeBearingParticleFilter::getMean(float &x, float &y, float &vx, float &
 
     ASSERT_(sumW > 0)
 
-    x = y = vx = vy = 0;
+    x = 0;
+    y = 0;
+    vx = 0;
+    vy = 0;
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         const double w = exp(it->log_w) / sumW;
-        x += (float)w * (*it).d->x;
-        y += (float)w * (*it).d->y;
-        vx += (float)w * (*it).d->vx;
-        vy += (float)w * (*it).d->vy;
+        x += float(w * it->d->x);
+        y += float(w * it->d->y);
+        vx += float(w * it->d->vx);
+        vy += float(w * it->d->vy);
     }
 }
 
