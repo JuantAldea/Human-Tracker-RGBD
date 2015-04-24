@@ -1,10 +1,5 @@
 project(va-05)
 cmake_minimum_required(VERSION 2.8)
-add_executable(objectDetection  objectDetection.cpp)
-add_executable(objectDetection2  objectDetection2.cpp)
-add_executable(squareDetection  squareDetection.cpp)
-add_executable(openni_capture openni_capture.cpp)
-add_executable(hog peopledetect.cpp)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -O0 -ggdb3")
 
@@ -17,15 +12,28 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 message("${CMAKE_CXX_FLAGS}")
 
-find_package(OpenCV REQUIRED)
-find_package(MRPT REQUIRED)
+#set(CMAKE_BUILD_TYPE Debug)
 
-target_link_libraries(objectDetection ${OpenCV_LIBS})
-target_link_libraries(objectDetection2 ${OpenCV_LIBS})
-target_link_libraries(squareDetection ${OpenCV_LIBS})
-target_link_libraries(openni_capture  ${OpenCV_LIBS})
-target_link_libraries(hog ${OpenCV_LIBS})
+FIND_PACKAGE(MRPT REQUIRED base;bayes;obs;gui)
+FIND_PACKAGE(OpenCV REQUIRED)
+FIND_PACKAGE(libfreenect REQUIRED)
 
-set(CMAKE_BUILD_TYPE Debug)
 
+ADD_EXECUTABLE(objectDetection  objectDetection.cpp)
+ADD_EXECUTABLE(objectDetection2  objectDetection2.cpp)
+ADD_EXECUTABLE(squareDetection  squareDetection.cpp)
+ADD_EXECUTABLE(openni_capture openni_capture.cpp)
+ADD_EXECUTABLE(hog peopledetect.cpp)
+ADD_EXECUTABLE(particle_filter particle_filter.cpp)
+
+ADD_LIBRARY (CObservationImageWithModel CObservationImageWithModel.cpp)
+
+LINK_DIRECTORIES(.)
+
+TARGET_LINK_LIBRARIES(particle_filter  ${MRPT_LIBS} ${OpenCV_LIBS} CObservationImageWithModel)
+TARGET_LINK_LIBRARIES(objectDetection ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(squareDetection ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(openni_capture  ${OpenCV_LIBS})
+TARGET_LINK_LIBRARIES(hog ${OpenCV_LIBS})
 
