@@ -23,7 +23,7 @@ namespace obs
      * \sa CObservation, CObservationStereoImages
      * \ingroup mrpt_obs_grp
      */
-    class OBS_IMPEXP CObservationImageWithModel : public CObservationImage 
+    class OBS_IMPEXP CObservationImageWithModel : public CObservationImage
     {
         // This must be added to any CSerializable derived class:
         DEFINE_SERIALIZABLE( CObservationImageWithModel )
@@ -38,5 +38,24 @@ namespace obs
 
     } // End of namespace
 } // End of namespace
+
+
+
+#include <mrpt/utils/CSerializable.h>
+#include <mrpt/utils/CStartUpClassesRegister.h>
+
+
+using namespace mrpt::obs;
+using namespace mrpt::utils;
+
+void registerclass_CObservationImageWithModel();
+
+CStartUpClassesRegister  register_CObservationImageWithModel(&registerclass_CObservationImageWithModel);
+
+void registerclass_CObservationImageWithModel()
+{
+    registerClass(CLASS_ID(CObservationImageWithModel));
+}
+const volatile int dumm = register_CObservationImageWithModel.do_nothing();
 
 #endif

@@ -79,6 +79,7 @@ void TestBayesianTracking()
 
     CDisplayWindowPlots winPF("Tracking - Particle Filter", 450, 400);
     CDisplayWindow image("image");
+    CDisplayWindow model("model");
     winPF.setPos(480, 10);
 
     winPF.axis(-2, 20, -10, 10);
@@ -96,7 +97,7 @@ void TestBayesianTracking()
 
     CImageParticleFilter  particles;
     particles.initializeParticles(NUM_PARTICLES, make_pair(0, 10), make_pair(0, 10), make_pair(0, 10), make_pair(0, 10));
-    
+
 
     // Init. simulation:
     // -------------------------
@@ -111,19 +112,21 @@ void TestBayesianTracking()
         return;
     }
 
-    
+
     while (winPF.isOpen() && !mrpt::system::os::kbhit()) {
         // make an observation
-        
+
         //frame.setFromIplImage(new IplImage(cv::Mat(cv::Mat::zeros(100, 100, CV_8UC1))));
         capture.grab();
         capture >> color_frame;
-        
+
         // Process with PF:
         CObservationImageWithModelPtr obsImage =CObservationImageWithModel::Create();
         obsImage->image = CImage(new IplImage(color_frame));
-        obsImage->model = cv::Mat::zeros(100, 100, CV_8UC1);
+        //obsImage->model = cv::Mat::zeros(100, 100, CV_8UC1);
+        obsImage->model = frame_color_hsv.clone();
         image.showImage(obsImage->image);
+        //model.showImage(CImage(new IplImage(obsImage->model)));
         // memory freed by SF.
         CSensoryFrame SF;
         SF.insert(obsImage);
@@ -187,11 +190,12 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
         m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
     }
 
-    CObservationImagePtr obs = observation->getObservationByClass<CObservationImage>();
+    CObservationImageWithModelPtr obs = observation->getObservationByClass<CObservationImageWithModel>();
     ASSERT_(obs);
     //ASSERT_(!obs->image.empty());
-    
+
     CImage image = obs->image;
+    cv::Mat model = obs->model;
 
     // Update weights
     for (i = 0; i < N; i++) {
@@ -206,15 +210,15 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
 void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y, const pair<float, float> v_x, const pair<float, float> v_y)
 {
     clearParticles();
-    
+
     m_particles.resize(M);
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         it->d = new CImageParticleData();
-        
+
         it->d->x  = randomGenerator.drawGaussian1D(x.first, x.second);
         it->d->y  = randomGenerator.drawGaussian1D(y.first, y.second);
-        
+
         it->d->vx = randomGenerator.drawGaussian1D(v_x.first, v_x.second);
         it->d->vy = randomGenerator.drawGaussian1D(v_y.first, v_y.second);
 
