@@ -38,9 +38,10 @@ ADD_LIBRARY (CObservationImageWithModel CObservationImageWithModel.cpp)
 LINK_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
 
 TARGET_LINK_LIBRARIES(particle_filter  ${MRPT_LIBS} ${OpenCV_LIBS} CObservationImageWithModel)
-TARGET_LINK_LIBRARIES(objectDetection ${OpenCV_LIBS})
 TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})
 TARGET_LINK_LIBRARIES(squareDetection ${OpenCV_LIBS})
-TARGET_LINK_LIBRARIES(openni_capture  ${OpenCV_LIBS})
-TARGET_LINK_LIBRARIES(hog ${OpenCV_LIBS})
+
+#TARGET_LINK_LIBRARIES(objectDetection ${OpenCV_LIBS})
+#TARGET_LINK_LIBRARIES(openni_capture  ${OpenCV_LIBS})
+#TARGET_LINK_LIBRARIES(hog ${OpenCV_LIBS})
 
