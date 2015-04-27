@@ -39,8 +39,6 @@ namespace obs
     } // End of namespace
 } // End of namespace
 
-
-
 #include <mrpt/utils/CSerializable.h>
 #include <mrpt/utils/CStartUpClassesRegister.h>
 
@@ -56,6 +54,8 @@ void registerclass_CObservationImageWithModel()
 {
     registerClass(CLASS_ID(CObservationImageWithModel));
 }
+
 const volatile int dumm = register_CObservationImageWithModel.do_nothing();
+
 
 #endif

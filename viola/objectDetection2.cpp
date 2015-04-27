@@ -540,7 +540,7 @@ for (auto detected_face : detected_faces) {
 void print_chests(const faces &detected_faces, Mat &frame, const float scale_width, const float scale_height, const uint32_t depth)
 {
     auto chests = chest_positions_from_face_positions(detected_faces, depth);
-for (auto detected_chest : chests) {
+    for (auto detected_chest : chests) {
         rectangle(frame, Rect(detected_chest.x * scale_width, detected_chest.y * scale_height, detected_chest.width * scale_width, detected_chest.height * scale_height),
                   Scalar(255, 0, 0), 2, 8, 0);
     }

@@ -1,17 +1,3 @@
-/* +---------------------------------------------------------------------------+
-   |                     Mobile Robot Programming Toolkit (MRPT)               |
-   |                          http://www.mrpt.org/                             |
-   |                                                                           |
-   | Copyright (c) 2005-2015, Individual contributors, see AUTHORS file        |
-   | See: http://www.mrpt.org/Authors - All rights reserved.                   |
-   | Released under BSD License. See details in http://www.mrpt.org/License    |
-   +---------------------------------------------------------------------------+ */
-// ------------------------------------------------------
-//  Refer to the description in the wiki:
-//  http://www.mrpt.org/Kalman_Filters
-// ------------------------------------------------------
-
-
 #include <mrpt/gui/CDisplayWindow.h>
 #include <mrpt/gui/CDisplayWindowPlots.h>
 #include <mrpt/random.h>
@@ -26,7 +12,7 @@
 #include <mrpt/utils/CSerializable.h>
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-#include "CObservationImageWithModel.h"
+#include <opencv2/gpu/gpu.hpp>
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -37,25 +23,27 @@ using namespace mrpt::utils;
 using namespace mrpt::random;
 using namespace std;
 
-#define BEARING_SENSOR_NOISE_STD    DEG2RAD(15.0f)
-#define RANGE_SENSOR_NOISE_STD      0.3f
 #define DELTA_TIME                  0.1f
 
-#define VEHICLE_INITIAL_X           4.0f
-#define VEHICLE_INITIAL_Y           4.0f
-#define VEHICLE_INITIAL_V           1.0f
-#define VEHICLE_INITIAL_W           DEG2RAD(20.0f)
+double TRANSITION_MODEL_STD_XY   = 50;
+double TRANSITION_MODEL_STD_VXY  = 50;
+double NUM_PARTICLES             = 5000;
 
-#define TRANSITION_MODEL_STD_XY     0.03f
-#define TRANSITION_MODEL_STD_VXY    0.20f
-
-#define NUM_PARTICLES               2000
+cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
+cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
+cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int radi_y, const int ndims);
+cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
+inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
 
 // ---------------------------------------------------------------
 //      Implementation of the system models as a Particle Filter
 // ---------------------------------------------------------------
 struct CImageParticleData {
-    float x, y, vx, vy; // Vehicle state (position & velocities)
+     // Vehicle state (position & velocities)
+    float x;
+    float y;
+    float vx;
+    float vy;
 };
 
 class CImageParticleFilter :
@@ -71,18 +59,33 @@ public:
     void initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y, const pair<float, float> v_x, const pair<float, float> v_y);
 
     void getMean(float &x, float &y, float &vx, float &vy);
+
+    void update_color_model(cv::Mat *model);
+
+private:
+    //TODO POTENTIAL LEAK! USE smartptr
+    cv::Mat *color_model;
 };
+
+cv::Mat video_sim(const double t)
+{
+    (void )(t);
+    cv::Mat frame = cv::Mat::ones (1280, 720, CV_8UC3);
+    const cv::Rect particle_roi(0, 0, 120, 80);
+    const cv::Mat mask = create_ellipse_mask(particle_roi, 3);
+    return frame;
+}
 
 void TestBayesianTracking()
 {
     randomGenerator.randomize();
 
-    CDisplayWindowPlots winPF("Tracking - Particle Filter", 450, 400);
+    CDisplayWindowPlots winPF("Tracking - Particle Filter", 1280, 720);
     CDisplayWindow image("image");
-    CDisplayWindow model("model");
-    winPF.setPos(480, 10);
+    CDisplayWindow model_window("model");
+    winPF.setPos(0, 0);
 
-    winPF.axis(-2, 20, -10, 10);
+    winPF.axis(0, 1280, 0, 720);
     winPF.axis_equal();
 
     // Create PF
@@ -95,10 +98,11 @@ void TestBayesianTracking()
     CParticleFilter PF;
     PF.m_options = PF_options;
 
-    CImageParticleFilter  particles;
-    particles.initializeParticles(NUM_PARTICLES, make_pair(0, 10), make_pair(0, 10), make_pair(0, 10), make_pair(0, 10));
-
-
+    CImageParticleFilter particles;
+    particles.initializeParticles(NUM_PARTICLES, make_pair(85+50, 100), make_pair(330+25, 50), make_pair(0, 50), make_pair(0, 50));
+    
+    //init color model
+    
     // Init. simulation:
     // -------------------------
     float  t = 0;
@@ -111,22 +115,35 @@ void TestBayesianTracking()
     if (!capture.isOpened()) {
         return;
     }
-
-
+    
+    bool init_model = true;
     while (winPF.isOpen() && !mrpt::system::os::kbhit()) {
         // make an observation
 
         //frame.setFromIplImage(new IplImage(cv::Mat(cv::Mat::zeros(100, 100, CV_8UC1))));
         capture.grab();
         capture >> color_frame;
+        
+        if (color_frame.empty()){
+            capture.set(CV_CAP_PROP_POS_FRAMES, 0);
+            exit(1);
+            continue;
+        }
 
         // Process with PF:
-        CObservationImageWithModelPtr obsImage =CObservationImageWithModel::Create();
+        CObservationImagePtr obsImage = CObservationImage::Create();
         obsImage->image = CImage(new IplImage(color_frame));
-        //obsImage->model = cv::Mat::zeros(100, 100, CV_8UC1);
-        obsImage->model = frame_color_hsv.clone();
-        image.showImage(obsImage->image);
-        //model.showImage(CImage(new IplImage(obsImage->model)));
+
+        if (init_model){
+            cv::Mat frame_hsv;
+            cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
+            const cv::Rect particle_roi(85, 330, 100, 50);
+            const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+            const cv::Mat model = compute_color_model(frame_hsv(particle_roi), mask);
+            particles.update_color_model(new cv::Mat(model));
+            init_model = false;
+        }
+
         // memory freed by SF.
         CSensoryFrame SF;
         SF.insert(obsImage);
@@ -135,12 +152,12 @@ void TestBayesianTracking()
 
         // Show PF state:
         cout << "Particle filter ESS: " << particles.ESS() << endl;
-
+        /*
         // Draw PF state:
         {
-            size_t i, N = particles.m_particles.size();
-            vector<float>   parts_x(N), parts_y(N);
-            for (i = 0; i < N; i++) {
+            size_t N = particles.m_particles.size();
+            vector<float> parts_x(N), parts_y(N);
+            for (size_t i = 0; i < N; i++) {
                 parts_x[i] = particles.m_particles[i].d->x;
                 parts_y[i] = particles.m_particles[i].d->y;
             }
@@ -159,6 +176,21 @@ void TestBayesianTracking()
             vy[1] = vy[0] + avrg_vy * 1;
             winPF.plot(vx, vy, "g-4", "velocityPF");
         }
+        */
+
+        size_t N = particles.m_particles.size();
+        for (size_t i = 0; i < N; i++) {
+            particles.m_particles[i].d->x;
+            particles.m_particles[i].d->y;
+            cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x, particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+        }
+        
+        float avrg_x, avrg_y, avrg_vx, avrg_vy;
+        particles.getMean(avrg_x, avrg_y, avrg_vx, avrg_vy);
+        cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+        cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
+        CImage frame_particles = CImage(new IplImage(color_frame));
+        image.showImage(frame_particles);
 
         /*
         // Draw GT:
@@ -169,9 +201,14 @@ void TestBayesianTracking()
         winPF.plot(obs_x, obs_y, "r", "plot_obs_ray");
         */
         // Delay:
-        mrpt::system::sleep((int)(DELTA_TIME * 1000));
+        //mrpt::system::sleep((int)(DELTA_TIME * 1000));
         t += DELTA_TIME;
     }
+}
+
+void CImageParticleFilter::update_color_model(cv::Mat *model)
+{
+    color_model = model;
 }
 
 void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
@@ -179,10 +216,25 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     const mrpt::obs::CSensoryFrame *observation,
     const bayes::CParticleFilter::TParticleFilterOptions&)
 {
-    size_t i, N = m_particles.size();
+    //CDisplayWindow model_window1("model1");
+    //CDisplayWindow model_window2("model2");
+    //CDisplayWindow model_window3("model3");
+    const CObservationImagePtr obs = observation->getObservationByClass<CObservationImage>();
+    ASSERT_(obs);
+    //ASSERT_(!obs->image.empty());
+
+    const CImage image = obs->image;
+    const cv::Mat image_mat = cv::Mat(image.getAs<IplImage>());
+    // TODO ROI for conversion -> use particle poses to determinate its dimensions
+    cv::Mat frame_hsv;
+    cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
 
     // Transition model:
-    for (i = 0; i < N; i++) {
+    
+    // first, update particles
+
+    size_t N = m_particles.size();
+    for (size_t i = 0; i < N; i++) {
         m_particles[i].d->x += DELTA_TIME * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->y += DELTA_TIME * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
 
@@ -190,20 +242,60 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
         m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
     }
 
-    CObservationImageWithModelPtr obs = observation->getObservationByClass<CObservationImageWithModel>();
-    ASSERT_(obs);
-    //ASSERT_(!obs->image.empty());
+    //second, check the color model wherever they lay on
+    vector <cv::Mat> particles_color_model(N);
+    const int roi_width = 100;
+    const int roi_height  = 50;
+    
+    for (size_t i = 0; i < N; i++) {
+        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+        //const cv::Rect particle_roi(100, 100, 100, 50);
+        if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0){
+            continue;
+        }
 
-    CImage image = obs->image;
-    cv::Mat model = obs->model;
+        if (particle_roi.x + particle_roi.width >= frame_hsv.cols || particle_roi.y + particle_roi.height >= frame_hsv.rows){
+            continue;
+        }
+        
+        const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+        const cv::Mat particle_roi_img = frame_hsv(particle_roi);
 
-    // Update weights
-    for (i = 0; i < N; i++) {
-        m_particles[i].log_w += 0;
-            //log(math::normalPDF(predicted_range - obsRange, 0, RANGE_SENSOR_NOISE_STD)) +
-            //log(math::normalPDF(math::wrapToPi(predicted_bearing - obsBearing), 0, BEARING_SENSOR_NOISE_STD));
+        // THIS NEEDS HEAVY OPTIMIZATION, most of the time is wasted here, in the vector insertion;
+        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+        
+        /*
+        cout << i << endl;  
+        cout << particle_roi.x << ' ' << particle_roi.y << ' ' << particle_roi.width << ' ' << particle_roi.height << endl;
+
+        CImage img = CImage(new IplImage(frame_hsv(particle_roi)));
+        model_window1.showImage(img);
+        
+        cv::Mat particle_histogram = histogram_to_image(particles_color_model[i], 10);
+        CImage img2 = CImage(new IplImage(particle_histogram));
+        model_window2.showImage(img2);
+
+        cv::Mat model_histogram = histogram_to_image(*color_model, 10);
+        CImage img3 = CImage(new IplImage(model_histogram));
+        model_window3.showImage(img3);
+        cout << cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+        int a;
+        cin >> a;
+        fflush(stdin);
+        */
     }
 
+    //third, weight them using the model
+    for (size_t i = 0; i < N; i++) {
+        if(!particles_color_model[i].empty()){
+            const double score = 1 - cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+            m_particles[i].log_w += log(score);
+        }else{
+            m_particles[i].log_w += log(0);
+        }
+        //cout << "SCORE " << exp(m_particles[i].log_w) << endl;
+    }
+    //cout << rand() << endl;
     // Resample is automatically performed by CParticleFilter when required.
 }
 
@@ -249,8 +341,112 @@ void CImageParticleFilter::getMean(float &x, float &y, float &vx, float &vy)
     }
 }
 
-int main()
+cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
 {
+    // Quantize the hue to 30 levels
+    // and the saturation to 32 levels
+    cv::Mat histogram;
+    const int hbins = 31;
+    const int sbins = 32;
+    
+    {
+        // hue varies from 0 to 179, it's scaled down by a half
+        const int histSize[] = {hbins, sbins};
+        // so that it fits in a byte.
+        const float hranges[] = {0, 180};
+        // saturation varies from 0 (black-gray-white) to
+        // 255 (pure spectrum color)
+        const float sranges[] = {0, 256};
+        const float* ranges[] = {hranges, sranges};
+        const int channels[] = {0, 1};
+        cv::calcHist(&hsv, 1, channels, mask, histogram, 2, histSize, ranges, true, false);
+    }
+
+    cv::Mat histogram_v;
+    {
+        const int channels[] = {2};
+        const int histSize[] = {sbins};
+        const float range[] = {0, 256} ;
+        const float* histRange = {range};
+        cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, &histRange, true, false);
+    }
+    
+    histogram_v = histogram_v.t();
+    histogram.push_back(histogram_v);
+
+    double sum = 0;
+    for (int h = 0; h < histogram.rows; h++) {
+        for (int s = 0; s < histogram.cols; s++) {
+            sum += histogram.at<float>(h, s);
+        }
+    }
+
+    for (int h = 0; h < histogram.rows; h++) {
+        for (int s = 0; s < histogram.cols; s++) {
+            histogram.at<float>(h, s) /= sum;
+        }
+    }
+
+    return histogram;
+}
+
+inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y)
+{
+    return (((point.x - center.x) * (point.x - center.x)) / float((radi_x * radi_x)) + ((point.y - center.y) * (point.y - center.y)) / float((radi_y * radi_y))) <= 1;
+}
+
+cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims)
+{
+    return create_ellipse_mask(cv::Point(rectangle.width / 2, rectangle.height / 2), rectangle.width / 2, rectangle.height / 2, ndims);
+}
+
+cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int radi_y, const int ndims)
+{
+    cv::Mat mask;
+    mask.create(radi_y * 2, radi_x * 2, CV_8UC1);
+    int channels = mask.channels();
+    int nRows = mask.rows;
+    int nCols = mask.cols * channels;
+    for (int i = 0; i < nRows; i++) {
+        uchar* mask_row = mask.ptr<uchar>(i);
+        for (int j = 0; j < nCols; j++) {
+            mask_row[j] = point_within_ellipse(cv::Point(j, i), center, radi_x, radi_y) ? 0xff : 0x0;
+        }
+    }
+
+    vector<cv::Mat> mask_channels(ndims);
+    for (int i = 0; i < ndims; i++) {
+        mask_channels[i] = mask;
+    }
+
+    cv::Mat mask_ndims;
+    cv::merge(mask_channels, mask_ndims);
+    return mask_ndims;
+}
+
+cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
+{
+    cv::Mat histImg = cv::Mat::zeros(histogram.rows * scale, histogram.cols * scale, CV_8UC1);
+    double maxVal = 0;
+    cv::minMaxLoc(histogram, 0, &maxVal, 0, 0);
+    for (int row = 0; row < histogram.rows; row++) {
+        for (int col = 0; col < histogram.cols; col++) {
+            const float binVal = histogram.at<float>(row, col);
+            const int intensity = cvRound(255 * (binVal / maxVal));
+            cv::rectangle(histImg, cv::Point(row * scale, col * scale),
+                      cv::Point((row + 1) * scale - 1, (col + 1) * scale - 1),
+                      cv::Scalar::all(intensity), CV_FILLED);
+        }
+    }
+    return histImg;
+}
+
+int main(int, char *argv[])
+{
+    NUM_PARTICLES = atof(argv[1]);
+    TRANSITION_MODEL_STD_XY   = atof(argv[2]);
+    TRANSITION_MODEL_STD_VXY  = atof(argv[3]);
+
     try {
         TestBayesianTracking();
         return 0;

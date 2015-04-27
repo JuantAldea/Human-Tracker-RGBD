@@ -1,5 +1,5 @@
 
-#include <mrpt/config.h>   // Precompiled headers
+#include <mrpt/config.h>
 
 #include "CObservationImageWithModel.h"
 
