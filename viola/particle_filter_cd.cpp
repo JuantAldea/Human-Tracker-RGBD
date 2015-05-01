@@ -12,9 +12,13 @@
 #include <mrpt/utils/CSerializable.h>
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-//#include <opencv2/gpu/gpu.hpp>
-//#include <limits>
+
 #include <tbb/tbb.h>
+
+#include "misc_helpers.h"
+#include "geometry_helpers.h"
+#include "color_model.h"
+
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
@@ -24,28 +28,21 @@ using namespace mrpt::utils;
 using namespace mrpt::random;
 using namespace std;
 
-#define DELTA_TIME                  0.1f
-
-double TRANSITION_MODEL_STD_XY   = 50;
-double TRANSITION_MODEL_STD_VXY  = 50;
-double NUM_PARTICLES             = 5000;
+double TRANSITION_MODEL_STD_XY   = 0;
+double TRANSITION_MODEL_STD_VXY  = 0;
+double NUM_PARTICLES             = 0;
 
 #define USE_INTEL_TBB
 #ifdef USE_INTEL_TBB
 #define TBB_PARTITIONS 8
 #endif
 
-cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
-cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
-cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int radi_y, const int ndims);
-cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
-inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
 vector<cv::Vec3f> detect_circles(const cv::Mat &image);
+
 // ---------------------------------------------------------------
 //      Implementation of the system models as a Particle Filter
 // ---------------------------------------------------------------
 struct CImageParticleData {
-    // Vehicle state (position & velocities)
     float x;
     float y;
     float z;
@@ -60,7 +57,7 @@ class CImageParticleFilter :
     mrpt::bayes::CParticleFilterData<CImageParticleData>::CParticleList >
 {
 public:
-    void update_particles_with_transition_model();
+    void update_particles_with_transition_model(double dt);
     void weight_particles_with_model(const CImage &observation);
 
     void prediction_and_update_pfStandardProposal(
@@ -75,130 +72,16 @@ public:
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
 
+    int64_t last_time;
 private:
     //TODO POTENTIAL LEAK! USE smartptr
     cv::Mat *color_model;
     int roi_width;
     int roi_height;
+
 };
 
 
-vector<cv::Vec3f> detect_circles(const cv::Mat &image)
-{
-    using namespace cv;
-    Mat src_gray;
-    Mat color = image.clone();
-    cvtColor(image, src_gray, CV_BGR2GRAY);
-    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
-    
-    vector<Vec3f> circles;
-    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 50, 0);
-    return circles;
-}
-
-void TestBayesianTracking()
-{
-    randomGenerator.randomize();
-    CDisplayWindow image("image");
-    CDisplayWindow model_window("model");
-
-    // Create PF
-    // ----------------------
-    CParticleFilter::TParticleFilterOptions PF_options;
-    PF_options.adaptiveSampleSize = false;
-    PF_options.PF_algorithm = CParticleFilter::pfStandardProposal;
-    //PF_options.resamplingMethod = CParticleFilter::prSystematic;
-    PF_options.resamplingMethod = CParticleFilter::prMultinomial;
-
-    CParticleFilter PF;
-    PF.m_options = PF_options;
-
-    CImageParticleFilter particles;
-    
-
-    //init color model
-
-    // Init. simulation:
-    // -------------------------
-    float  t = 0;
-
-    cv::VideoCapture capture(CV_CAP_OPENNI);
-    capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
-    cv::Mat color_frame;
-    cv::Mat frame_color_hsv;
-
-    if (!capture.isOpened()) {
-        return;
-    }
-
-    bool init_model = true;
-    while (!mrpt::system::os::kbhit()) {
-        // make an observation
-        capture.grab();
-        capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
-        /*
-        if (color_frame.empty()) {
-            capture.set(CV_CAP_PROP_POS_FRAMES, 0);
-            exit(1);
-            continue;
-        }
-        */
-
-        // Process with PF:
-        CObservationImagePtr obsImage = CObservationImage::Create();
-        obsImage->image = CImage(new IplImage(color_frame));
-
-        if (init_model) {
-            cv::Mat frame_hsv;
-            auto circles = detect_circles(color_frame);
-            if (circles.size()){
-                for (size_t i = 0; i < circles.size(); i++) {
-                    cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
-                    int radius = cvRound(circles[i][2]);
-                    cv::circle(color_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                    cv::circle(color_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
-                }
-                cv::Point center(cvRound(circles[0][0]), cvRound(circles[0][1]));
-                int radius = cvRound(circles[0][2]);
-                cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
-                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2*radius, 2*radius);
-                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-                model_window.showImage(CImage(new IplImage(mask)));
-                
-                const cv::Mat model = compute_color_model(frame_hsv(particle_roi), mask);
-                particles.update_color_model(new cv::Mat(model), radius, radius);
-                particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y, radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
-                init_model = false;
-            }
-        }else{
-            // memory freed by SF.
-            CSensoryFrame SF;
-            SF.insert(obsImage);
-            // Process in the PF
-            PF.executeOn(particles, NULL, &SF);
-
-            // Show PF state:
-            cout << "Particle filter ESS: " << particles.ESS() << endl;
-
-            size_t N = particles.m_particles.size();
-            for (size_t i = 0; i < N; i++) {
-                particles.m_particles[i].d->x;
-                particles.m_particles[i].d->y;
-                cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x, particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
-            }
-
-            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-            particles.getMean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
-            cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
-            t += DELTA_TIME;
-        }
-
-        CImage frame_particles = CImage(new IplImage(color_frame));
-        image.showImage(frame_particles);
-    }
-}
 
 void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_width, const int roi_height)
 {
@@ -207,15 +90,15 @@ void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_widt
     this->roi_height = roi_height;
 }
 
-void CImageParticleFilter::update_particles_with_transition_model()
+void CImageParticleFilter::update_particles_with_transition_model(const double dt)
 {
     size_t N = m_particles.size();
 
 #ifndef USE_INTEL_TBB
     for (size_t i = 0; i < N; i++) {
-        m_particles[i].d->x += DELTA_TIME * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->y += DELTA_TIME * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->z += DELTA_TIME * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
@@ -223,9 +106,9 @@ void CImageParticleFilter::update_particles_with_transition_model()
 #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
-            m_particles[i].d->x += DELTA_TIME * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->y += DELTA_TIME * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->z += DELTA_TIME * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
@@ -339,7 +222,6 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         for (size_t i = r.begin(); i != r.end(); i++) {
             if (!particles_color_model[i].empty()) {
                 const double score = 1 - cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
-                cout << score << endl;
                 m_particles[i].log_w += log(score);
             } else {
                 m_particles[i].log_w += log(0);
@@ -361,9 +243,12 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     ASSERT_(obs);
     //ASSERT_(!obs->image.empty());
 
-    update_particles_with_transition_model();
-    weight_particles_with_model(obs->image);
+    const int64_t current_time = cv::getTickCount();
+    const double dt = (current_time - last_time) / cv::getTickFrequency();
+    last_time = current_time;
 
+    update_particles_with_transition_model(dt);
+    weight_particles_with_model(obs->image);
 
     // Resample is automatically performed by CParticleFilter when required.
 }
@@ -428,104 +313,125 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
     }
 }
 
-cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
+
+
+vector<cv::Vec3f> detect_circles(const cv::Mat &image)
 {
-    // Quantize the hue to 30 levels
-    // and the saturation to 32 levels
-    cv::Mat histogram;
-    const int hbins = 31;
-    const int sbins = 32;
+    using namespace cv;
+    Mat src_gray;
+    Mat color = image.clone();
+    cvtColor(image, src_gray, CV_BGR2GRAY);
+    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
 
-    {
-        // hue varies from 0 to 179, it's scaled down by a half
-        const int histSize[] = {hbins, sbins};
-        // so that it fits in a byte.
-        const float hranges[] = {0, 180};
-        // saturation varies from 0 (black-gray-white) to
-        // 255 (pure spectrum color)
-        const float sranges[] = {0, 256};
-        const float* ranges[] = {hranges, sranges};
-        const int channels[] = {0, 1};
-        cv::calcHist(&hsv, 1, channels, mask, histogram, 2, histSize, ranges, true, false);
-    }
-
-    cv::Mat histogram_v;
-    {
-        const int channels[] = {2};
-        const int histSize[] = {sbins};
-        const float range[] = {0, 256} ;
-        const float* histRange = {range};
-        cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, &histRange, true, false);
-    }
-
-    histogram_v = histogram_v.t();
-    histogram.push_back(histogram_v);
-
-    double sum = 0;
-    for (int h = 0; h < histogram.rows; h++) {
-        for (int s = 0; s < histogram.cols; s++) {
-            sum += histogram.at<float>(h, s);
-        }
-    }
-
-    for (int h = 0; h < histogram.rows; h++) {
-        for (int s = 0; s < histogram.cols; s++) {
-            histogram.at<float>(h, s) /= sum;
-        }
-    }
-
-    return histogram;
+    vector<Vec3f> circles;
+    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 50, 0);
+    return circles;
 }
 
-inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y)
+void TestBayesianTracking()
 {
-    return (((point.x - center.x) * (point.x - center.x)) / float((radi_x * radi_x)) + ((point.y - center.y) * (point.y - center.y)) / float((radi_y * radi_y))) <= 1;
-}
+    randomGenerator.randomize();
+    CDisplayWindow image("image");
+    CDisplayWindow model_window("model");
 
-cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims)
-{
-    return create_ellipse_mask(cv::Point(rectangle.width / 2, rectangle.height / 2), rectangle.width / 2, rectangle.height / 2, ndims);
-}
+    // Create PF
+    // ----------------------
+    CParticleFilter::TParticleFilterOptions PF_options;
+    PF_options.adaptiveSampleSize = false;
+    PF_options.PF_algorithm = CParticleFilter::pfStandardProposal;
+    //PF_options.resamplingMethod = CParticleFilter::prSystematic;
+    PF_options.resamplingMethod = CParticleFilter::prMultinomial;
 
-cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int radi_y, const int ndims)
-{
-    cv::Mat mask;
-    mask.create(radi_y * 2, radi_x * 2, CV_8UC1);
-    int channels = mask.channels();
-    int nRows = mask.rows;
-    int nCols = mask.cols * channels;
-    for (int i = 0; i < nRows; i++) {
-        uchar* mask_row = mask.ptr<uchar>(i);
-        for (int j = 0; j < nCols; j++) {
-            mask_row[j] = point_within_ellipse(cv::Point(j, i), center, radi_x, radi_y) ? 0xff : 0x0;
+    CParticleFilter PF;
+    PF.m_options = PF_options;
+
+    CImageParticleFilter particles;
+
+
+    //init color model
+
+    // Init. simulation:
+    // -------------------------
+
+    cv::VideoCapture capture(CV_CAP_OPENNI);
+    capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
+    cv::Mat color_frame;
+    cv::Mat frame_color_hsv;
+
+    if (!capture.isOpened()) {
+        return;
+    }
+
+    bool init_model = true;
+
+    while (!mrpt::system::os::kbhit()) {
+        // make an observation
+        capture.grab();
+        capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
+        /*
+        if (color_frame.empty()) {
+            capture.set(CV_CAP_PROP_POS_FRAMES, 0);
+            exit(1);
+            continue;
         }
-    }
+        */
 
-    vector<cv::Mat> mask_channels(ndims);
-    for (int i = 0; i < ndims; i++) {
-        mask_channels[i] = mask;
-    }
+        // Process with PF:
+        CObservationImagePtr obsImage = CObservationImage::Create();
+        obsImage->image = CImage(new IplImage(color_frame));
 
-    cv::Mat mask_ndims;
-    cv::merge(mask_channels, mask_ndims);
-    return mask_ndims;
-}
+        if (init_model) {
+            cv::Mat frame_hsv;
+            auto circles = detect_circles(color_frame);
+            if (circles.size()){
+                for (size_t i = 0; i < circles.size(); i++) {
+                    cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+                    int radius = cvRound(circles[i][2]);
+                    cv::circle(color_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                    cv::circle(color_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+                }
+                cv::Point center(cvRound(circles[0][0]), cvRound(circles[0][1]));
+                int radius = cvRound(circles[0][2]);
+                cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
+                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
+                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2*radius, 2*radius);
+                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+                model_window.showImage(CImage(new IplImage(mask)));
 
-cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
-{
-    cv::Mat histImg = cv::Mat::zeros(histogram.rows * scale, histogram.cols * scale, CV_8UC1);
-    double maxVal = 0;
-    cv::minMaxLoc(histogram, 0, &maxVal, 0, 0);
-    for (int row = 0; row < histogram.rows; row++) {
-        for (int col = 0; col < histogram.cols; col++) {
-            const float binVal = histogram.at<float>(row, col);
-            const int intensity = cvRound(255 * (binVal / maxVal));
-            cv::rectangle(histImg, cv::Point(row * scale, col * scale),
-                          cv::Point((row + 1) * scale - 1, (col + 1) * scale - 1),
-                          cv::Scalar::all(intensity), CV_FILLED);
+                const cv::Mat model = compute_color_model(frame_hsv(particle_roi), mask);
+                particles.update_color_model(new cv::Mat(model), radius, radius);
+                particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y, radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                init_model = false;
+                particles.last_time = cv::getTickCount();
+
+            }
+        }else{
+            // memory freed by SF.
+            CSensoryFrame SF;
+            SF.insert(obsImage);
+            // Process in the PF
+            PF.executeOn(particles, NULL, &SF);
+
+            // Show PF state:
+            cout << "Particle filter ESS: " << particles.ESS() << endl;
+
+            size_t N = particles.m_particles.size();
+            for (size_t i = 0; i < N; i++) {
+                particles.m_particles[i].d->x;
+                particles.m_particles[i].d->y;
+                cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x, particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+            }
+
+            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
+            particles.getMean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
+            cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
+
         }
+
+        CImage frame_particles = CImage(new IplImage(color_frame));
+        image.showImage(frame_particles);
     }
-    return histImg;
 }
 
 int main(int, char *argv[])
@@ -548,4 +454,3 @@ int main(int, char *argv[])
     }
     */
 }
-
