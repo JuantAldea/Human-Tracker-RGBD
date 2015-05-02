@@ -376,11 +376,11 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     //CDisplayWindow model_window3("model3");
     const CObservationImagePtr obs = observation->getObservationByClass<CObservationImage>();
     ASSERT_(obs);
-    //ASSERT_(!obs->image.empty());    
+    //ASSERT_(!obs->image.empty());
 
     update_particles_with_transition_model();
     weight_particles_with_model(obs->image);
-    
+
 
     // Resample is automatically performed by CParticleFilter when required.
 }
@@ -418,7 +418,7 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
     sumW = tbb::parallel_reduce(
         tbb::blocked_range<CParticleList::iterator>(m_particles.begin(), m_particles.end(), m_particles.size() / TBB_PARTITIONS), 0.f,
         [](const tbb::blocked_range<CParticleList::iterator> &r, double value) -> double {
-            return std::accumulate(r.begin(), r.end(), value, 
+            return std::accumulate(r.begin(), r.end(), value,
                 [](double value, const CParticleData &p) -> double {
                     return exp(p.log_w) + value;
             });
@@ -426,7 +426,7 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
         std::plus<double>()
     );
 #endif
-    
+
     ASSERT_(sumW > 0)
 
     x = 0;
@@ -439,7 +439,7 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
         x += float(w * it->d->x);
         y += float(w * it->d->y);
         z += float(w * it->d->z);
-        
+
         vx += float(w * it->d->vx);
         vy += float(w * it->d->vy);
         vz += float(w * it->d->vz);

@@ -15,6 +15,9 @@
 
 #include <tbb/tbb.h>
 
+#include <libfreenect2/libfreenect2.hpp>
+#include <libfreenect2/frame_listener_impl.h>
+
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
@@ -65,7 +68,8 @@ public:
         const mrpt::obs::CSensoryFrame *observation,
         const bayes::CParticleFilter::TParticleFilterOptions&);
 
-    void initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y, const pair<float, float> z,
+    void initializeParticles(const size_t M, const pair<float, float> x,
+                             const pair<float, float> y, const pair<float, float> z,
                              const pair<float, float> v_x, const pair<float, float> v_y, const pair<float, float> v_z);
 
     void getMean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
@@ -82,8 +86,8 @@ private:
 };
 
 
-
-void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_width, const int roi_height)
+void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_width,
+        const int roi_height)
 {
     color_model = model;
     this->roi_width = roi_width;
@@ -96,19 +100,26 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 
 #ifndef USE_INTEL_TBB
     for (size_t i = 0; i < N; i++) {
-        m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY *
+                               randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY *
+                               randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY *
+                               randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
     }
 #else
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
+    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
-            m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY *
+                                   randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY *
+                                   randomGenerator.drawGaussian1D_normalized();
+            m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY *
+                                   randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
@@ -140,15 +151,18 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         }
         const cv::Rect particle_roi(m_particles[i].d->x - particles_roi.x - roi_width * 0.5, m_particles[i].d->y - particles_roi.y - roi_height * 0.5, roi_width, roi_height);
         */
-        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
+                                    m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
         //cout << particle_roi.x << ' ' << particle_roi.y << ' ' << particle_roi.width << ' ' << particle_roi.height << endl;
         //const cv::Rect particle_roi(100, 100, 100, 50);
 
-        if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0) {
+        if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
+                || particle_roi.height <= 0) {
             continue;
         }
 
-        if (particle_roi.x + particle_roi.width >= frame_hsv.cols || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+        if (particle_roi.x + particle_roi.width >= frame_hsv.cols
+                || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
             continue;
         }
 
@@ -181,14 +195,18 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
 #else
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
     //tbb::mutex countMutex;
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
+    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
-            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0) {
+            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
+                                        m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
+                    || particle_roi.height <= 0) {
                 continue;
             }
 
-            if (particle_roi.x + particle_roi.width >= frame_hsv.cols || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+            if (particle_roi.x + particle_roi.width >= frame_hsv.cols
+                    || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
                 continue;
             }
 
@@ -210,7 +228,8 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
 #ifndef USE_INTEL_TBB
     for (size_t i = 0; i < N; i++) {
         if (!particles_color_model[i].empty()) {
-            const double score = 1 - cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+            const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
+                                 CV_COMP_BHATTACHARYYA);
             m_particles[i].log_w += log(score);
         } else {
             m_particles[i].log_w += log(0);
@@ -218,10 +237,12 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         //cout << "SCORE " << exp(m_particles[i].log_w) << endl;
     }
 #else
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
-        for (size_t i = r.begin(); i != r.end(); i++) {
-            if (!particles_color_model[i].empty()) {
-                const double score = 1 - cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                if (!particles_color_model[i].empty()) {
+                const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
+                                     CV_COMP_BHATTACHARYYA);
                 m_particles[i].log_w += log(score);
             } else {
                 m_particles[i].log_w += log(0);
@@ -253,8 +274,10 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     // Resample is automatically performed by CParticleFilter when required.
 }
 
-void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x, const pair<float, float> y,
-        const pair<float, float> z, const pair<float, float> v_x, const pair<float, float> v_y, const pair<float, float> v_z)
+void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x,
+        const pair<float, float> y,
+        const pair<float, float> z, const pair<float, float> v_x, const pair<float, float> v_y,
+        const pair<float, float> v_z)
 {
     clearParticles();
 
@@ -275,7 +298,8 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
     }
 }
 
-void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, float &vy, float &vz)
+void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, float &vy,
+                                   float &vz)
 {
     double sumW = 0;
 #ifndef USE_INTEL_TBB
@@ -284,14 +308,17 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
     }
 #else
     sumW = tbb::parallel_reduce(
-        tbb::blocked_range<CParticleList::iterator>(m_particles.begin(), m_particles.end(), m_particles.size() / TBB_PARTITIONS), 0.f,
+        tbb::blocked_range<CParticleList::iterator>(m_particles.begin(), m_particles.end(),
+        m_particles.size() / TBB_PARTITIONS), 0.f,
         [](const tbb::blocked_range<CParticleList::iterator> &r, double value) -> double {
             return std::accumulate(r.begin(), r.end(), value,
-                [](double value, const CParticleData &p) -> double {
+                [](double value, const CParticleData & p) -> double {
                     return exp(p.log_w) + value;
-            });
+                }
+            );
         },
-        std::plus<double>());
+        std::plus<double>()
+    );
 #endif
 
     ASSERT_(sumW > 0)
@@ -330,9 +357,43 @@ vector<cv::Vec3f> detect_circles(const cv::Mat &image)
 
 void TestBayesianTracking()
 {
+    cv::Mat color_frame;
+    cv::Mat model_frame;
+#define USE_KINECT_2
+#ifdef USE_KINECT_2
+    libfreenect2::Freenect2 freenect2;
+    std::cout << "kinect2" << std::endl;
+    libfreenect2::Freenect2Device *dev = freenect2.openDefaultDevice();
+
+    if (dev == nullptr) {
+        std::cout << "no device connected or failure opening the default one!" << std::endl;
+        return;
+    }
+
+    libfreenect2::SyncMultiFrameListener listener(libfreenect2::Frame::Color |
+            libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+    libfreenect2::FrameMap frames;
+
+    dev->setColorFrameListener(&listener);
+    dev->setIrAndDepthFrameListener(&listener);
+    dev->start();
+
+    std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
+    std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
+#else
+
+    cv::VideoCapture capture(CV_CAP_OPENNI);
+    capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
+
+    if (!capture.isOpened()) {
+        return;
+    }
+#endif
+
     randomGenerator.randomize();
     CDisplayWindow image("image");
     CDisplayWindow model_window("model");
+    CDisplayWindow model_image_window("model-image");
 
     // Create PF
     // ----------------------
@@ -353,21 +414,22 @@ void TestBayesianTracking()
     // Init. simulation:
     // -------------------------
 
-    cv::VideoCapture capture(CV_CAP_OPENNI);
-    capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
-    cv::Mat color_frame;
-    cv::Mat frame_color_hsv;
-
-    if (!capture.isOpened()) {
-        return;
-    }
 
     bool init_model = true;
 
     while (!mrpt::system::os::kbhit()) {
         // make an observation
+#ifdef USE_KINECT_2
+
+        listener.waitForNewFrame(frames);
+        libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
+        libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
+        libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
+        color_frame = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
+#else
         capture.grab();
         capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
+#endif
         /*
         if (color_frame.empty()) {
             capture.set(CV_CAP_PROP_POS_FRAMES, 0);
@@ -383,29 +445,40 @@ void TestBayesianTracking()
         if (init_model) {
             cv::Mat frame_hsv;
             auto circles = detect_circles(color_frame);
-            if (circles.size()){
+            if (circles.size()) {
+                int circle_max = 0;
+                double radius_max = circles[0][2];
                 for (size_t i = 0; i < circles.size(); i++) {
                     cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
                     int radius = cvRound(circles[i][2]);
                     cv::circle(color_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                     cv::circle(color_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+                    if (radius_max < radius){
+                        radius_max = radius;
+                        circle_max = i;
+                    }
                 }
-                cv::Point center(cvRound(circles[0][0]), cvRound(circles[0][1]));
-                int radius = cvRound(circles[0][2]);
+                cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
+                int radius = cvRound(circles[circle_max][2]);
                 cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2*radius, 2*radius);
+                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
                 const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-                model_window.showImage(CImage(new IplImage(mask)));
-
                 const cv::Mat model = compute_color_model(frame_hsv(particle_roi), mask);
                 particles.update_color_model(new cv::Mat(model), radius, radius);
-                particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y, radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y,
+                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
                 init_model = false;
                 particles.last_time = cv::getTickCount();
 
+
+                model_frame = cv::Mat(color_frame(particle_roi).size(), color_frame.type());
+                const cv::Mat ones = cv::Mat::ones(color_frame(particle_roi).size(), color_frame(particle_roi).type());
+                bitwise_and(color_frame(particle_roi), ones, model_frame, mask);
+                model_image_window.showImage(CImage(new IplImage(color_frame(particle_roi))));
+                model_window.showImage(CImage(new IplImage(mask)));
             }
-        }else{
+        } else {
             // memory freed by SF.
             CSensoryFrame SF;
             SF.insert(obsImage);
@@ -419,18 +492,22 @@ void TestBayesianTracking()
             for (size_t i = 0; i < N; i++) {
                 particles.m_particles[i].d->x;
                 particles.m_particles[i].d->y;
-                cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x, particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+                cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x,
+                                                  particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
             }
 
             float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
             particles.getMean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
             cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
-
+            cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
+                     cv::Scalar(0, 255, 0), 5, 1, 0);
         }
 
         CImage frame_particles = CImage(new IplImage(color_frame));
         image.showImage(frame_particles);
+#ifdef USE_KINECT_2
+        listener.release(frames);
+#endif
     }
 }
 
