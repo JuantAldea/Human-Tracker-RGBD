@@ -1,3 +1,6 @@
+#include <limits>
+#include <signal.h>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wextra"
@@ -27,9 +30,11 @@
 
 #include <tbb/tbb.h>
 
+//#define USE_KINECT_2
+#ifdef USE_KINECT_2
 #include <libfreenect2/libfreenect2.hpp>
 #include <libfreenect2/frame_listener_impl.h>
-
+#endif
 
 #pragma GCC diagnostic pop
 
@@ -49,6 +54,10 @@ using namespace std;
 double TRANSITION_MODEL_STD_XY   = 0;
 double TRANSITION_MODEL_STD_VXY  = 0;
 double NUM_PARTICLES             = 0;
+
+#ifndef USE_KINECT_2
+cv::VideoCapture capture;
+#endif
 
 #define USE_INTEL_TBB
 #ifdef USE_INTEL_TBB
@@ -146,30 +155,16 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 void CImageParticleFilter::weight_particles_with_model(const CImage &observation)
 {
     const cv::Mat image_mat = cv::Mat(observation.getAs<IplImage>());
-    size_t N = m_particles.size();
 
-    //const int roi_width = 100;
-    //const int roi_height  = 50;
-    // TODO ROI for conversion -> use particle poses to determinate its dimensions
-    //cv::Rect particles_roi = cv::Rect(particles_x_min, particles_y_min, particles_x_max - particles_x_min, particles_y_max - particles_y_min);
-    //cout << "PARTICLES ROI " << particles_roi.x << ' ' << particles_roi.y << ' ' << particles_roi.width << ' ' << particles_roi.height << endl;
-    //cv::Mat particles_roi_img = image_mat(particles_roi);
     cv::Mat frame_hsv;
     cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
 
+    size_t N = m_particles.size();
 #ifndef USE_INTEL_TBB
     vector <cv::Mat> particles_color_model(N);
     for (size_t i = 0; i < N; i++) {
-        /*
-        if (!particles_with_roi_inside_image[i]){
-            continue;
-        }
-        const cv::Rect particle_roi(m_particles[i].d->x - particles_roi.x - roi_width * 0.5, m_particles[i].d->y - particles_roi.y - roi_height * 0.5, roi_width, roi_height);
-        */
         const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
                                     m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-        //cout << particle_roi.x << ' ' << particle_roi.y << ' ' << particle_roi.width << ' ' << particle_roi.height << endl;
-        //const cv::Rect particle_roi(100, 100, 100, 50);
 
         if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
                 || particle_roi.height <= 0) {
@@ -184,7 +179,6 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
 
-        // THIS NEEDS HEAVY OPTIMIZATION, most of the time is wasted here, in the vector insertion;
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
 
         /*
@@ -209,34 +203,28 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
     }
 #else
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
-    //tbb::mutex countMutex;
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
-    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
-        for (size_t i = r.begin(); i != r.end(); i++) {
-            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
-                                        m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
-                    || particle_roi.height <= 0) {
-                continue;
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
+        [this, &frame_hsv, &particles_color_model](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
+                                            m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+                if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
+                        || particle_roi.height <= 0) {
+                    continue;
+                }
+
+                if (particle_roi.x + particle_roi.width >= frame_hsv.cols
+                        || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+                    continue;
+                }
+
+                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+                const cv::Mat particle_roi_img = frame_hsv(particle_roi);
+
+                particles_color_model[i] = compute_color_model(particle_roi_img, mask);
             }
-
-            if (particle_roi.x + particle_roi.width >= frame_hsv.cols
-                    || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-                continue;
-            }
-
-            const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-            const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
-            // THIS NEEDS HEAVY OPTIMIZATION, most of the time is wasted here, in the vector insertion;
-            particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-            /*
-            countMutex.lock();
-            cout << "RANGE " << r.size() << endl << flush;
-            countMutex.unlock();
-            */
         }
-    });
+    );
 #endif
 
 /*
@@ -275,23 +263,24 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
                                  CV_COMP_BHATTACHARYYA);
             m_particles[i].log_w += log(score);
         } else {
-            m_particles[i].log_w += log(0);
+            m_particles[i].log_w += log(0);//log(std::numeric_limits<double>::lowest());
         }
         //cout << "SCORE " << exp(m_particles[i].log_w) << endl;
     }
 #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
-        [&](const tbb::blocked_range<size_t> &r) {
+        [this, &particles_color_model](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 if (!particles_color_model[i].empty()) {
-                const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
+                    const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
                                      CV_COMP_BHATTACHARYYA);
-                m_particles[i].log_w += log(score);
-            } else {
-                m_particles[i].log_w += log(0);
+                    m_particles[i].log_w += log(score);
+                } else {
+                    m_particles[i].log_w += log(0);//log(std::numeric_limits<double>::lowest());
+                }
             }
         }
-    });
+    );
 #endif
 }
 
@@ -352,16 +341,15 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
 #else
     sumW = tbb::parallel_reduce(
         tbb::blocked_range<CParticleList::iterator>(m_particles.begin(), m_particles.end(),
-        m_particles.size() / TBB_PARTITIONS), 0.f,
-        [](const tbb::blocked_range<CParticleList::iterator> &r, double value) -> double {
-            return std::accumulate(r.begin(), r.end(), value,
-                [](double value, const CParticleData & p) -> double {
-                    return exp(p.log_w) + value;
-                }
-            );
-        },
-        std::plus<double>()
-    );
+            m_particles.size() / TBB_PARTITIONS), 0.f,
+                [](const tbb::blocked_range<CParticleList::iterator> &r, double value) -> double {
+                    return std::accumulate(r.begin(), r.end(), value,
+                        [](double value, const CParticleData & p) -> double {
+                            return exp(p.log_w) + value;
+                        });
+                },
+            std::plus<double>()
+        );
 #endif
 
     ASSERT_(sumW > 0)
@@ -403,7 +391,7 @@ void TestBayesianTracking()
     cv::Mat color_frame;
     cv::Mat model_frame;
     cv::Mat depth_frame;
-#define USE_KINECT_2
+
 #ifdef USE_KINECT_2
     libfreenect2::Freenect2 freenect2;
     std::cout << "kinect2" << std::endl;
@@ -425,9 +413,15 @@ void TestBayesianTracking()
     std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
     std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
 #else
-
-    cv::VideoCapture capture(CV_CAP_OPENNI);
+    capture.open(CV_CAP_OPENNI);
     capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
+    struct sigaction sigIntHandler;
+    sigIntHandler.sa_handler = [](int){ capture.release(); exit(0); };
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+    sigaction(SIGINT, &sigIntHandler, NULL);
+    sigaction(SIGQUIT, &sigIntHandler, NULL);
+    sigaction(SIGSEGV, &sigIntHandler, NULL);
 
     if (!capture.isOpened()) {
         return;
@@ -453,18 +447,9 @@ void TestBayesianTracking()
 
     CImageParticleFilter particles;
 
-
-    //init color model
-
-    // Init. simulation:
-    // -------------------------
-
-
     bool init_model = true;
 
     while (!mrpt::system::os::kbhit()) {
-        // make an observation
-
 #ifdef USE_KINECT_2
         listener.waitForNewFrame(frames);
         libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
@@ -472,25 +457,44 @@ void TestBayesianTracking()
         libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
         color_frame = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
         depth_frame = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
-#else //kinect1
+#else //kinect 1
         capture.grab();
         capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
+        capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
+        /*
+        capture.retrieve(grey_frame, CV_CAP_OPENNI_GRAY_IMAGE);
+        capture.retrieve(disparity_map, CV_CAP_OPENNI_DISPARITY_MAP);
+        capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
+        capture.retrieve(valid_depth_pixels, CV_CAP_OPENNI_VALID_DEPTH_MASK);
+        */
 #endif
         /*
         if (color_frame.empty()) {
             capture.set(CV_CAP_PROP_POS_FRAMES, 0);
-            exit(1);
-            continue;
+
         }
         */
 
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
-        obsImage->image = CImage(new IplImage(color_frame));
+        obsImage->image.loadFromIplImage(new IplImage(color_frame));
+        
         cv::Mat gradient = sobel_operator(color_frame);
-        cv::Mat gradient_depth = sobel_operator(cv::Mat(depth_frame)/4500.f);
-        model_window.showImage(CImage(new IplImage(gradient)));
-        //depth_window.showImage(CImage(new IplImage(gradient_depth)));
+
+        double min, max;
+        cv::minMaxLoc(depth_frame, &min, &max);
+        cv::Mat depth_frame_normalized = (depth_frame * 255)/ max;
+        cv::Mat gradient_depth = sobel_operator(depth_frame_normalized);
+        cv::Mat gradient_depth_8UC1 = cv::Mat(depth_frame.size(), CV_8UC1);
+        
+        gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
+        CImage model_image;
+        model_image.loadFromIplImage(new IplImage(gradient));
+        CImage depth_image;
+        depth_image.loadFromIplImage(new IplImage(gradient_depth_8UC1));
+        model_window.showImage(model_image);
+        depth_window.showImage(depth_image);
+
         if (init_model) {
             cv::Mat frame_hsv;
             auto circles = detect_circles(color_frame);
@@ -527,8 +531,9 @@ void TestBayesianTracking()
 
                 //cv::Mat gradient = sobel_operator(color_frame(model_roi));
                 //model_window.showImage(CImage(new IplImage(gradient)));
-
-                model_image_window.showImage(CImage(new IplImage(color_frame(model_roi))));
+                CImage model_frame;
+                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                model_image_window.showImage(model_frame);
             }
         } else {
             // memory freed by SF.
@@ -554,8 +559,9 @@ void TestBayesianTracking()
             cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
                      cv::Scalar(0, 255, 0), 5, 1, 0);
         }
-
-        CImage frame_particles = CImage(new IplImage(color_frame));
+    
+        CImage frame_particles;
+        frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);
 #ifdef USE_KINECT_2
         listener.release(frames);

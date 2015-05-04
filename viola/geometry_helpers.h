@@ -28,7 +28,7 @@ inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center
 
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims)
 {
-    return create_ellipse_mask(cv::Point(rectangle.width / 2, rectangle.height / 2), rectangle.width, rectangle.height, ndims);
+    return create_ellipse_mask(cv::Point(rectangle.width / 2.f, rectangle.height / 2.f), rectangle.width, rectangle.height, ndims);
 }
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int ndims)
