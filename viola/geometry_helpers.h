@@ -1,7 +1,21 @@
 #pragma once
+#include <vector>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Werror"
+#pragma GCC diagnostic ignored "-Wlong-long"
+#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-pedantic-errors"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-#include <vector>
+
+#pragma GCC diagnostic pop
+
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int ndims);
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);

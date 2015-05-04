@@ -1,3 +1,15 @@
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Werror"
+#pragma GCC diagnostic ignored "-Wlong-long"
+
+#pragma GCC diagnostic ignored "-pedantic"
+#pragma GCC diagnostic ignored "-pedantic-errors"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #include <mrpt/gui/CDisplayWindow.h>
 #include <mrpt/gui/CDisplayWindowPlots.h>
 #include <mrpt/random.h>
@@ -17,6 +29,9 @@
 
 #include <libfreenect2/libfreenect2.hpp>
 #include <libfreenect2/frame_listener_impl.h>
+
+
+#pragma GCC diagnostic pop
 
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
@@ -224,6 +239,34 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
     });
 #endif
 
+/*
+#ifndef USE_INTEL_TBB
+#else
+    tbb::concurrent_vector <cv::Mat> particles_color_model(N);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
+    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+        for (size_t i = r.begin(); i != r.end(); i++) {
+            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
+                                        m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
+                    || particle_roi.height <= 0) {
+                continue;
+            }
+
+            if (particle_roi.x + particle_roi.width >= frame_hsv.cols
+                    || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+                continue;
+            }
+
+            const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+            const cv::Mat particle_roi_img = frame_hsv(particle_roi);
+
+            particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+        }
+    });
+
+#endif
+  */
     //third, weight them using the model
 #ifndef USE_INTEL_TBB
     for (size_t i = 0; i < N; i++) {
@@ -359,6 +402,7 @@ void TestBayesianTracking()
 {
     cv::Mat color_frame;
     cv::Mat model_frame;
+    cv::Mat depth_frame;
 #define USE_KINECT_2
 #ifdef USE_KINECT_2
     libfreenect2::Freenect2 freenect2;
@@ -394,6 +438,7 @@ void TestBayesianTracking()
     CDisplayWindow image("image");
     CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
+    CDisplayWindow depth_window("depth_window");
 
     // Create PF
     // ----------------------
@@ -419,14 +464,15 @@ void TestBayesianTracking()
 
     while (!mrpt::system::os::kbhit()) {
         // make an observation
-#ifdef USE_KINECT_2
 
+#ifdef USE_KINECT_2
         listener.waitForNewFrame(frames);
         libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
         libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
         libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
         color_frame = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
-#else
+        depth_frame = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
+#else //kinect1
         capture.grab();
         capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
 #endif
@@ -441,7 +487,10 @@ void TestBayesianTracking()
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
         obsImage->image = CImage(new IplImage(color_frame));
-
+        cv::Mat gradient = sobel_operator(color_frame);
+        cv::Mat gradient_depth = sobel_operator(cv::Mat(depth_frame)/4500.f);
+        model_window.showImage(CImage(new IplImage(gradient)));
+        //depth_window.showImage(CImage(new IplImage(gradient_depth)));
         if (init_model) {
             cv::Mat frame_hsv;
             auto circles = detect_circles(color_frame);
@@ -462,9 +511,9 @@ void TestBayesianTracking()
                 int radius = cvRound(circles[circle_max][2]);
                 cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
-                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-                const cv::Mat model = compute_color_model(frame_hsv(particle_roi), mask);
+                const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
+                const cv::Mat mask = create_ellipse_mask(model_roi, 1);
+                const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
                 particles.update_color_model(new cv::Mat(model), radius, radius);
                 particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y,
                                               radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
@@ -472,11 +521,14 @@ void TestBayesianTracking()
                 particles.last_time = cv::getTickCount();
 
 
-                model_frame = cv::Mat(color_frame(particle_roi).size(), color_frame.type());
-                const cv::Mat ones = cv::Mat::ones(color_frame(particle_roi).size(), color_frame(particle_roi).type());
-                bitwise_and(color_frame(particle_roi), ones, model_frame, mask);
-                model_image_window.showImage(CImage(new IplImage(color_frame(particle_roi))));
-                model_window.showImage(CImage(new IplImage(mask)));
+                model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
+                const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
+                bitwise_and(color_frame(model_roi), ones, model_frame, mask);
+
+                //cv::Mat gradient = sobel_operator(color_frame(model_roi));
+                //model_window.showImage(CImage(new IplImage(gradient)));
+
+                model_image_window.showImage(CImage(new IplImage(color_frame(model_roi))));
             }
         } else {
             // memory freed by SF.
