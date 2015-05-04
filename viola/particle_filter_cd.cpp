@@ -41,11 +41,11 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
 vector<cv::Vec3f> detect_circles(const cv::Mat &image);
+cv::Mat sobel_operator(const cv::Mat &img);
 // ---------------------------------------------------------------
 //      Implementation of the system models as a Particle Filter
 // ---------------------------------------------------------------
 struct CImageParticleData {
-    // Vehicle state (position & velocities)
     float x;
     float y;
     float z;
@@ -162,7 +162,7 @@ void TestBayesianTracking()
                 int radius = cvRound(circles[0][2]);
                 cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2*radius, 2*radius);
+                const cv::Rect particle_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
                 const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
                 model_window.showImage(CImage(new IplImage(mask)));
                 
@@ -221,7 +221,7 @@ void CImageParticleFilter::update_particles_with_transition_model()
         m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
     }
 #else
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [this](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
             m_particles[i].d->x += DELTA_TIME * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
             m_particles[i].d->y += DELTA_TIME * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
@@ -234,32 +234,60 @@ void CImageParticleFilter::update_particles_with_transition_model()
 #endif
 }
 
+
+cv::Mat sobel_operator(const cv::Mat &img)
+{
+    using namespace cv;
+    Mat grad;
+    Mat src = img.clone();
+
+    GaussianBlur(src, src, Size(3,3), 0, 0, BORDER_DEFAULT);
+
+    /// Generate grad_x and grad_y
+    Mat grad_x, grad_y;
+    Mat abs_grad_x, abs_grad_y;
+
+    /// Gradient X
+    //Scharr(src, grad_x, CV_16S, 1, 0, 1, 0, BORDER_DEFAULT);
+    Sobel(src, grad_x, CV_32F, 1, 0, 3, 1, 0, BORDER_DEFAULT);
+    convertScaleAbs(grad_x, abs_grad_x);
+
+    /// Gradient Y
+    //Scharr(src, grad_y, CV_16S, 0, 1, 1, 0, BORDER_DEFAULT);
+    Sobel(src, grad_y, CV_32F, 0, 1, 3, 1, 0, BORDER_DEFAULT);
+    convertScaleAbs(grad_y, abs_grad_y);
+
+    /// Total Gradient (approximate)
+    magnitude(abs_grad_x, abs_grad_y, grad);
+
+    return grad;
+}
+
+
 void CImageParticleFilter::weight_particles_with_model(const CImage &observation)
 {
     const cv::Mat image_mat = cv::Mat(observation.getAs<IplImage>());
+
+    cv::Mat frame_hsv;
+    cv::Mat frame_grey;
+
+    cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
+    cv::cvtColor(image_mat, frame_grey, cv::COLOR_BGR2GRAY);
+
+
     size_t N = m_particles.size();
 
-    //const int roi_width = 100;
-    //const int roi_height  = 50;
-    // TODO ROI for conversion -> use particle poses to determinate its dimensions
-    //cv::Rect particles_roi = cv::Rect(particles_x_min, particles_y_min, particles_x_max - particles_x_min, particles_y_max - particles_y_min);
-    //cout << "PARTICLES ROI " << particles_roi.x << ' ' << particles_roi.y << ' ' << particles_roi.width << ' ' << particles_roi.height << endl;
-    //cv::Mat particles_roi_img = image_mat(particles_roi);
-    cv::Mat frame_hsv;
-    cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
+#ifndef USE_INTEL_TBB
+
+#else
+
+#endif
+
 
 #ifndef USE_INTEL_TBB
     vector <cv::Mat> particles_color_model(N);
     for (size_t i = 0; i < N; i++) {
-        /*
-        if (!particles_with_roi_inside_image[i]){
-            continue;
-        }
-        const cv::Rect particle_roi(m_particles[i].d->x - particles_roi.x - roi_width * 0.5, m_particles[i].d->y - particles_roi.y - roi_height * 0.5, roi_width, roi_height);
-        */
         const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-        //cout << particle_roi.x << ' ' << particle_roi.y << ' ' << particle_roi.width << ' ' << particle_roi.height << endl;
-        //const cv::Rect particle_roi(100, 100, 100, 50);
 
         if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0) {
             continue;
@@ -272,7 +300,6 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
 
-        // THIS NEEDS HEAVY OPTIMIZATION, most of the time is wasted here, in the vector insertion;
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
 
         /*
@@ -297,29 +324,23 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
     }
 #else
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
-    //tbb::mutex countMutex;
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
-        for (size_t i = r.begin(); i != r.end(); i++) {
-            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0) {
-                continue;
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
+        [this, &frame_hsv, &particles_color_model](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5, m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
+                if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0 || particle_roi.height <= 0) {
+                    continue;
+                }
+
+                if (particle_roi.x + particle_roi.width >= frame_hsv.cols || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+                    continue;
+                }
+
+                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+                const cv::Mat particle_roi_img = frame_hsv(particle_roi);
+
+                particles_color_model[i] = compute_color_model(particle_roi_img, mask);
             }
-
-            if (particle_roi.x + particle_roi.width >= frame_hsv.cols || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-                continue;
-            }
-
-            const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-            const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
-            // THIS NEEDS HEAVY OPTIMIZATION, most of the time is wasted here, in the vector insertion;
-            particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-            /*
-            countMutex.lock();
-            cout << "RANGE " << r.size() << endl << flush;
-            countMutex.unlock();
-            */
-        }
     });
 #endif
 
@@ -335,11 +356,11 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         //cout << "SCORE " << exp(m_particles[i].log_w) << endl;
     }
 #else
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), [this, &particles_color_model](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
             if (!particles_color_model[i].empty()) {
                 const double score = 1 - cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
-                cout << score << endl;
+                //cout << score << endl;
                 m_particles[i].log_w += log(score);
             } else {
                 m_particles[i].log_w += log(0);
@@ -450,6 +471,7 @@ cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
     }
 
     cv::Mat histogram_v;
+
     {
         const int channels[] = {2};
         const int histSize[] = {sbins};
@@ -484,13 +506,13 @@ inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center
 
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims)
 {
-    return create_ellipse_mask(cv::Point(rectangle.width / 2, rectangle.height / 2), rectangle.width / 2, rectangle.height / 2, ndims);
+    return create_ellipse_mask(cv::Point(rectangle.width / 2.f, rectangle.height / 2.f), cvRound(rectangle.width), cvRound(rectangle.height), ndims);
 }
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int radi_x, const int radi_y, const int ndims)
 {
     cv::Mat mask;
-    mask.create(radi_y * 2, radi_x * 2, CV_8UC1);
+    mask.create(radi_y, radi_x, CV_8UC1);
     int channels = mask.channels();
     int nRows = mask.rows;
     int nCols = mask.cols * channels;
