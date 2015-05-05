@@ -83,6 +83,7 @@ cv::Mat sobel_operator(const cv::Mat &image)
     cv::Mat squared_grad_x, squared_grad_y;
     cv::Mat gradient_modulus;
     cv::Mat image_gray_float;
+    
     image_gray.convertTo(image_gray_float, CV_32F);
     cv::Sobel(image_gray_float, grad_x, CV_16S, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
     cv::Sobel(image_gray_float, grad_y, CV_16S, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
@@ -94,18 +95,32 @@ cv::Mat sobel_operator(const cv::Mat &image)
     cv::pow(grad_y_float, 2.f, squared_grad_y);
     cv::sqrt(squared_grad_x + squared_grad_y, gradient_modulus);
 
+    grad_x_float /= gradient_modulus;
+    grad_y_float /= gradient_modulus;
+    std::vector<cv::Mat> gradients = {grad_x_float, grad_y_float};
+
+    cv::Mat gradient_vectors;
+    cv::merge(gradients, gradient_vectors);
+
+    cv::Mat gradient_modulus_scaled;
     double min, max;
     cv::minMaxLoc(gradient_modulus, &min, &max);
-    cv::Mat gradient_modulus_scaled;
     cv::convertScaleAbs(gradient_modulus, gradient_modulus_scaled, 255/max);
 
-
-    //grad_x /= gradient_modulus;
-    //grad_y /= gradient_modulus;
-    std::vector<cv::Mat> gradients = {grad_x, grad_y};
-
-    //cv::Mat gradient_vectors;
-    //cv::merge(gradients, gradient_vectors);
-
-    return gradient_modulus_scaled;//cv::Mat::zeros(100, 100, CV_8UC1);
+    //cv::ellipse2Poly(cv::Mat(), cv::Point(), cv::Size(), 360, 0, 0, cv::Scalar(255, 0, 0), 1, 0);
+    return gradient_modulus_scaled;
 }
+/*
+std::vector<cv::Point> ellipse2Poly()
+{
+    int XY_SHIFT = 16;
+    int XY_ONE = 1 << XY_SHIFT;
+
+    axes.width = std::abs(axes.width), axes.height = std::abs(axes.height);
+    int delta = (std::max(axes.width, axes.height) + (XY_ONE >> 1)) >> XY_SHIFT;
+    delta = delta < 3 ? 90 : delta < 10 ? 30 : delta < 15 ? 18 : 5;
+    std::vector<cv::Point> v;
+    ellipse2Poly( center, axes, angle, arc_start, arc_end, delta, v );
+    return v;
+}
+*/

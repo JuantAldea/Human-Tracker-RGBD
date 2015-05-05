@@ -14,21 +14,11 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <mrpt/gui/CDisplayWindow.h>
-#include <mrpt/gui/CDisplayWindowPlots.h>
 #include <mrpt/random.h>
-#include <mrpt/system/os.h>
-#include <mrpt/system/threads.h>
-#include <mrpt/math/wrap2pi.h>
-#include <mrpt/math/distributions.h>
 #include <mrpt/bayes/CParticleFilterData.h>
-
 #include <mrpt/obs/CSensoryFrame.h>
 #include <mrpt/obs/CObservationImage.h>
-#include <mrpt/utils/CSerializable.h>
-
 #include <mrpt/otherlibs/do_opencv_includes.h>
-
-#include <tbb/tbb.h>
 
 //#define USE_KINECT_2
 #ifdef USE_KINECT_2
@@ -38,6 +28,12 @@
 
 #pragma GCC diagnostic pop
 
+#define USE_INTEL_TBB
+#include <tbb/tbb.h>
+#ifdef USE_INTEL_TBB
+#define TBB_PARTITIONS 8
+#endif
+
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
@@ -45,11 +41,11 @@
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
-using namespace mrpt::math;
 using namespace mrpt::obs;
-using namespace mrpt::utils;
 using namespace mrpt::random;
+
 using namespace std;
+
 
 double TRANSITION_MODEL_STD_XY   = 0;
 double TRANSITION_MODEL_STD_VXY  = 0;
@@ -59,10 +55,7 @@ double NUM_PARTICLES             = 0;
 cv::VideoCapture capture;
 #endif
 
-#define USE_INTEL_TBB
-#ifdef USE_INTEL_TBB
-#define TBB_PARTITIONS 8
-#endif
+
 
 vector<cv::Vec3f> detect_circles(const cv::Mat &image);
 
@@ -84,21 +77,28 @@ class CImageParticleFilter :
     mrpt::bayes::CParticleFilterData<CImageParticleData>::CParticleList >
 {
 public:
-    void update_particles_with_transition_model(double dt);
-    void weight_particles_with_model(const CImage &observation);
+    void update_particles_with_transition_model(double dt, const mrpt::obs::CSensoryFrame * const observation);
+    void weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation);
 
     void prediction_and_update_pfStandardProposal(
         const mrpt::obs::CActionCollection*,
-        const mrpt::obs::CSensoryFrame *observation,
+        const mrpt::obs::CSensoryFrame * const observation,
         const bayes::CParticleFilter::TParticleFilterOptions&);
 
-    void initializeParticles(const size_t M, const pair<float, float> x,
-                             const pair<float, float> y, const pair<float, float> z,
-                             const pair<float, float> v_x, const pair<float, float> v_y, const pair<float, float> v_z);
+    void initializeParticles(const size_t M,
+                             const pair<float, float> x,
+                             const pair<float, float> y,
+                             const pair<float, float> z,
+                             const pair<float, float> v_x,
+                             const pair<float, float> v_y,
+                             const pair<float, float> v_z,
+                             const mrpt::obs::CSensoryFrame * const observation);
 
-    void getMean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
+    
+    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
+    void print_particle_state(void) const;
 
     int64_t last_time;
 private:
@@ -109,6 +109,16 @@ private:
 
 };
 
+void CImageParticleFilter::print_particle_state(void) const
+{
+    size_t N = m_particles.size();
+    for (size_t i = 0; i < N; i++) {
+        std::cout << i << ' ' << m_particles[i].d->x
+            << ' ' << m_particles[i].d->y << ' ' << m_particles[i].d->z
+            << ' ' << m_particles[i].d->vx<< ' ' << m_particles[i].d->vy
+            << ' ' << m_particles[i].d->vz << std::endl;
+    }
+}
 
 void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_width,
         const int roi_height)
@@ -118,48 +128,61 @@ void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_widt
     this->roi_height = roi_height;
 }
 
-void CImageParticleFilter::update_particles_with_transition_model(const double dt)
+void CImageParticleFilter::update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation)
 {
-    size_t N = m_particles.size();
+    const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
+    const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
+    
+    ASSERT_(obs_image);
+    ASSERT_(obs_depth);
 
-#ifndef USE_INTEL_TBB
-    for (size_t i = 0; i < N; i++) {
+    const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
+    const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
+
+    auto update_particle = [&](int i) {
         m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY *
                                randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY *
                                randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY *
-                               randomGenerator.drawGaussian1D_normalized();
+
+        const double old_z = m_particles[i].d->z;
+        const int x = cvRound((m_particles[i].d->x * depth_mat.cols) / float(image_mat.cols));
+        const int y = cvRound((m_particles[i].d->y * depth_mat.rows) / float(image_mat.rows));
+        m_particles[i].d->z = depth_mat.at<unsigned short>(y, x);
+
         m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vz = (m_particles[i].d->z - old_z) / dt;
+    };
+
+    size_t N = m_particles.size();
+#ifndef USE_INTEL_TBB
+    for (size_t i = 0; i < N; i++) {
+        update_particle(i);
     }
 #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
-    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
+    N / TBB_PARTITIONS), [&update_particle](const tbb::blocked_range<size_t> &r) {
         for (size_t i = r.begin(); i != r.end(); i++) {
-            m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY *
-                                   randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY *
-                                   randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY *
-                                   randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-            m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+            update_particle(i);
         }
     });
 #endif
 }
 
-void CImageParticleFilter::weight_particles_with_model(const CImage &observation)
+void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
-    const cv::Mat image_mat = cv::Mat(observation.getAs<IplImage>());
+    const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
+    
+    ASSERT_(obs_image);
+
+    const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
 
     cv::Mat frame_hsv;
     cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
 
     size_t N = m_particles.size();
+
 #ifndef USE_INTEL_TBB
     vector <cv::Mat> particles_color_model(N);
     for (size_t i = 0; i < N; i++) {
@@ -180,26 +203,6 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
 
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-
-        /*
-        cout << i << endl;
-        cout << particle_roi.x << ' ' << particle_roi.y << ' ' << particle_roi.width << ' ' << particle_roi.height << endl;
-
-        CImage img = CImage(new IplImage(frame_hsv(particle_roi)));
-        model_window1.showImage(img);
-
-        cv::Mat particle_histogram = histogram_to_image(particles_color_model[i], 10);
-        CImage img2 = CImage(new IplImage(particle_histogram));
-        model_window2.showImage(img2);
-
-        cv::Mat model_histogram = histogram_to_image(*color_model, 10);
-        CImage img3 = CImage(new IplImage(model_histogram));
-        model_window3.showImage(img3);
-        cout << cv::compareHist(*color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
-        int a;
-        cin >> a;
-        fflush(stdin);
-        */
     }
 #else
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
@@ -227,57 +230,25 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
     );
 #endif
 
-/*
-#ifndef USE_INTEL_TBB
-#else
-    tbb::concurrent_vector <cv::Mat> particles_color_model(N);
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N,
-    N / TBB_PARTITIONS), [&](const tbb::blocked_range<size_t> &r) {
-        for (size_t i = r.begin(); i != r.end(); i++) {
-            const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
-                                        m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-            if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
-                    || particle_roi.height <= 0) {
-                continue;
-            }
-
-            if (particle_roi.x + particle_roi.width >= frame_hsv.cols
-                    || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-                continue;
-            }
-
-            const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-            const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
-            particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-        }
-    });
-
-#endif
-  */
-    //third, weight them using the model
-#ifndef USE_INTEL_TBB
-    for (size_t i = 0; i < N; i++) {
+    auto weight_particle = [this, &particles_color_model] (size_t i){
         if (!particles_color_model[i].empty()) {
             const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
                                  CV_COMP_BHATTACHARYYA);
             m_particles[i].log_w += log(score);
         } else {
-            m_particles[i].log_w += log(0);//log(std::numeric_limits<double>::lowest());
+            m_particles[i].log_w += log(std::numeric_limits<double>::min());
         }
-        //cout << "SCORE " << exp(m_particles[i].log_w) << endl;
+    };
+    //third, weight them
+#ifndef USE_INTEL_TBB
+    for (size_t i = 0; i < N; i++) {
+        weight_particle(i);
     }
 #else
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
-        [this, &particles_color_model](const tbb::blocked_range<size_t> &r) {
+        [this, &particles_color_model, &weight_particle](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
-                if (!particles_color_model[i].empty()) {
-                    const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
-                                     CV_COMP_BHATTACHARYYA);
-                    m_particles[i].log_w += log(score);
-                } else {
-                    m_particles[i].log_w += log(0);//log(std::numeric_limits<double>::lowest());
-                }
+                weight_particle(i);
             }
         }
     );
@@ -286,22 +257,19 @@ void CImageParticleFilter::weight_particles_with_model(const CImage &observation
 
 void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
     const mrpt::obs::CActionCollection*,
-    const mrpt::obs::CSensoryFrame *observation,
+    const mrpt::obs::CSensoryFrame * const observation,
     const bayes::CParticleFilter::TParticleFilterOptions&)
 {
     //CDisplayWindow model_window1("model1");
     //CDisplayWindow model_window2("model2");
     //CDisplayWindow model_window3("model3");
-    const CObservationImagePtr obs = observation->getObservationByClass<CObservationImage>();
-    ASSERT_(obs);
-    //ASSERT_(!obs->image.empty());
 
     const int64_t current_time = cv::getTickCount();
     const double dt = (current_time - last_time) / cv::getTickFrequency();
     last_time = current_time;
 
-    update_particles_with_transition_model(dt);
-    weight_particles_with_model(obs->image);
+    update_particles_with_transition_model(dt, observation);
+    weight_particles_with_model(observation);
 
     // Resample is automatically performed by CParticleFilter when required.
 }
@@ -309,9 +277,14 @@ void  CImageParticleFilter::prediction_and_update_pfStandardProposal(
 void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x,
         const pair<float, float> y,
         const pair<float, float> z, const pair<float, float> v_x, const pair<float, float> v_y,
-        const pair<float, float> v_z)
+        const pair<float, float> v_z, const mrpt::obs::CSensoryFrame * const observation)
 {
     clearParticles();
+
+    const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
+    ASSERT_(obs_depth);
+    
+    const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
 
     m_particles.resize(M);
 
@@ -320,18 +293,24 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
 
         it->d->x  = randomGenerator.drawGaussian1D(x.first, x.second);
         it->d->y  = randomGenerator.drawGaussian1D(y.first, y.second);
-        it->d->z  = randomGenerator.drawGaussian1D(z.first, z.second);
 
         it->d->vx = randomGenerator.drawGaussian1D(v_x.first, v_x.second);
         it->d->vy = randomGenerator.drawGaussian1D(v_y.first, v_y.second);
-        it->d->vz = randomGenerator.drawGaussian1D(v_z.first, v_z.second);
 
-        it->log_w   = 0;
+        if (observation != nullptr){
+            it->d->z  = depth_mat.at<float>(cvRound(it->d->y), cvRound(it->d->x));
+            it->d->vz = 0;
+        } else{
+            it->d->z  = randomGenerator.drawGaussian1D(z.first, z.second);
+            it->d->vz = randomGenerator.drawGaussian1D(v_z.first, v_z.second);;
+        }
+
+        it->log_w = 0;
     }
 }
 
-void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, float &vy,
-                                   float &vz)
+void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, float &vy,
+                                   float &vz) const
 {
     double sumW = 0;
 #ifndef USE_INTEL_TBB
@@ -340,11 +319,11 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
     }
 #else
     sumW = tbb::parallel_reduce(
-        tbb::blocked_range<CParticleList::iterator>(m_particles.begin(), m_particles.end(),
+        tbb::blocked_range<CParticleList::const_iterator>(m_particles.begin(), m_particles.end(),
             m_particles.size() / TBB_PARTITIONS), 0.f,
-                [](const tbb::blocked_range<CParticleList::iterator> &r, double value) -> double {
+                [](const tbb::blocked_range<CParticleList::const_iterator> &r, double value) -> double {
                     return std::accumulate(r.begin(), r.end(), value,
-                        [](double value, const CParticleData & p) -> double {
+                        [](double value, const CParticleData &p) -> double {
                             return exp(p.log_w) + value;
                         });
                 },
@@ -356,10 +335,12 @@ void CImageParticleFilter::getMean(float &x, float &y, float &z, float &vx, floa
 
     x = 0;
     y = 0;
+    z = 0;
     vx = 0;
     vy = 0;
+    vz = 0;
 
-    for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
+    for (CParticleList::const_iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         const double w = exp(it->log_w) / sumW;
         x += float(w * it->d->x);
         y += float(w * it->d->y);
@@ -477,7 +458,15 @@ void TestBayesianTracking()
 
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
+        CObservationImagePtr obsImage2 = CObservationImage::Create();
         obsImage->image.loadFromIplImage(new IplImage(color_frame));
+        obsImage2->image.loadFromIplImage(new IplImage(depth_frame));
+
+        // memory freed by SF.
+        CSensoryFrame SF;
+        SF.insert(obsImage);
+        SF.insert(obsImage2);
+
         
         cv::Mat gradient = sobel_operator(color_frame);
 
@@ -520,7 +509,7 @@ void TestBayesianTracking()
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
                 particles.update_color_model(new cv::Mat(model), radius, radius);
                 particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y,
-                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), &SF);
                 init_model = false;
                 particles.last_time = cv::getTickCount();
 
@@ -536,14 +525,12 @@ void TestBayesianTracking()
                 model_image_window.showImage(model_frame);
             }
         } else {
-            // memory freed by SF.
-            CSensoryFrame SF;
-            SF.insert(obsImage);
             // Process in the PF
             PF.executeOn(particles, NULL, &SF);
 
             // Show PF state:
             cout << "Particle filter ESS: " << particles.ESS() << endl;
+
 
             size_t N = particles.m_particles.size();
             for (size_t i = 0; i < N; i++) {
@@ -554,10 +541,13 @@ void TestBayesianTracking()
             }
 
             float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-            particles.getMean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
+            particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
             cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
                      cv::Scalar(0, 255, 0), 5, 1, 0);
+            
+            //particles.print_particle_state();
+            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
         }
     
         CImage frame_particles;
@@ -569,16 +559,35 @@ void TestBayesianTracking()
     }
 }
 
-int main(int, char *argv[])
-{
-    NUM_PARTICLES = atof(argv[1]);
-    TRANSITION_MODEL_STD_XY   = atof(argv[2]);
-    TRANSITION_MODEL_STD_VXY  = atof(argv[3]);
 
+int main(int argc, char *argv[])
+{
+    if (argc > 1){
+        NUM_PARTICLES = atof(argv[1]);
+    }else{
+        NUM_PARTICLES = 1000;
+    }
+
+    if (argc > 2){
+        TRANSITION_MODEL_STD_XY = atof(argv[2]);
+    }else{
+        TRANSITION_MODEL_STD_XY = 10;
+    }
+
+    if (argc > 3){
+        TRANSITION_MODEL_STD_VXY  = atof(argv[3]);
+    }else{
+        TRANSITION_MODEL_STD_VXY  = 10;
+    }
+
+    std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " TRANSITION_MODEL_STD_XY: " << TRANSITION_MODEL_STD_XY << " TRANSITION_MODEL_STD_VXY: " << TRANSITION_MODEL_STD_VXY << std::endl;
     TestBayesianTracking();
+
     return 0;
+
     /*
     try {
+        TestBayesianTracking();
         return 0;
     } catch (std::exception &e) {
         std::cout << "MRPT exception caught: " << e.what() << std::endl;

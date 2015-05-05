@@ -2,7 +2,7 @@ project(viola)
 
 cmake_minimum_required(VERSION 2.8)
 
-set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules/)
+set(CMAKE_MODULE_PATH ${viola_SOURCE_DIR}/CMakeModules/)
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -18,7 +18,6 @@ INCLUDE_DIRECTORIES("${LIBUSB_DIR}/include/libusb-1.0/")
 LINK_DIRECTORIES("${LIBUSB_DIR}/lib/")
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-
 FIND_PACKAGE(PkgConfig QUIET)
 FIND_PACKAGE(OpenCV REQUIRED)
 FIND_PACKAGE(libfreenect REQUIRED)
@@ -26,8 +25,13 @@ FIND_PACKAGE(freenect2 REQUIRED)
 PKG_CHECK_MODULES(TBB tbb)
 FIND_PACKAGE(MRPT REQUIRED base bayes obs gui)
 
+INCLUDE_DIRECTORIES({freenect2_INCLUDE_DIR})
+LINK_DIRECTORIES(${viola_SOURCE_DIR})
+
+ADD_LIBRARY(CImageParticleFilter SHARED CImageParticleFilter.cpp)
 
 ADD_EXECUTABLE(particle_filter_cd particle_filter_cd.cpp)
+ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 
 #ADD_EXECUTABLE(objectDetection2 objectDetection2.cpp)
 #ADD_EXECUTABLE(squareDetection  squareDetection.cpp)
@@ -36,11 +40,15 @@ ADD_EXECUTABLE(particle_filter_cd particle_filter_cd.cpp)
 #ADD_EXECUTABLE(openni_capture openni_capture.cpp)
 #ADD_EXECUTABLE(hog peopledetect.cpp)
 
-LINK_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR})
-
-INCLUDE_DIRECTORIES({freenect2_INCLUDE_DIR})
+#find_library(CImageParticleFilter libCImageParticleFilter.a)
 
 TARGET_LINK_LIBRARIES(particle_filter_cd ${MRPT_LIBS} ${OpenCV_LIBS} ${TBB_LIBRARIES} ${freenect2_LIBRARY})
+TARGET_LINK_LIBRARIES(particle_filter_main
+	 CImageParticleFilter
+	 ${MRPT_LIBS} 
+	 ${OpenCV_LIBS} 
+	 ${TBB_LIBRARIES} 
+	 ${freenect2_LIBRARY})
 
 #TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})
 #TARGET_LINK_LIBRARIES(squareDetection ${OpenCV_LIBS})

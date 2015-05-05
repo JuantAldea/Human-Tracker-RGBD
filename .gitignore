@@ -34,3 +34,4 @@ cmake_install.cmake
 install_manifest.txt
 #imgs
 *.jpg
+viola/depends/glfw/
