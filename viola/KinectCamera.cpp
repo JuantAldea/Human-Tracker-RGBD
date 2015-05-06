@@ -4,7 +4,7 @@ int KinectCamera::open()
 {
 #ifdef USE_KINECT_2
     dev = freenect2.openDefaultDevice();
-    
+
     if (dev == nullptr) {
         std::cout << "no device connected or failure opening the default one!" << std::endl;
         return -1;
@@ -13,13 +13,13 @@ int KinectCamera::open()
     dev->setColorFrameListener(listener);
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
-    
+
     std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
     std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
 #else
     capture.open(CV_CAP_OPENNI);
     capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
-    
+
     if (!capture.isOpened()) {
         return -1;
     }
@@ -30,7 +30,7 @@ int KinectCamera::open()
 
 void KinectCamera::close()
 {
-#ifdef USE_KINECT_2 
+#ifdef USE_KINECT_2
     dev->stop();
     dev->close();
     listener->release(frames_kinect2);
@@ -65,7 +65,7 @@ KinectCamera::~KinectCamera()
 void KinectCamera::grabFrames()
 {
 #ifdef USE_KINECT_2
-        //listener->release(frames_kinect2);
+        listener->release(frames_kinect2);
         listener->waitForNewFrame(frames_kinect2);
         const libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
         const libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
@@ -74,7 +74,7 @@ void KinectCamera::grabFrames()
         frames[FrameType::DEPTH] = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
         frames[FrameType::IR]    = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
 #else
-        capture.grab();        
+        capture.grab();
         capture.retrieve(frames[FrameType::COLOR], CV_CAP_OPENNI_BGR_IMAGE);
         capture.retrieve(frames[FrameType::DEPTH], CV_CAP_OPENNI_DEPTH_MAP);
         capture.retrieve(frames[FrameType::GRAY_IMAGE], CV_CAP_OPENNI_GRAY_IMAGE);

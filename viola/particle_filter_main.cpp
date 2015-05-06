@@ -87,8 +87,8 @@ void TestBayesianTracking()
         camera.grabFrames();
         color_frame = camera.frames[KinectCamera::FrameType::COLOR];
         depth_frame = camera.frames[KinectCamera::FrameType::DEPTH];
-        
-        /*
+
+
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
         CObservationImagePtr obsImage2 = CObservationImage::Create();
@@ -105,7 +105,7 @@ void TestBayesianTracking()
         cv::Mat depth_frame_normalized = (depth_frame * 255)/ max;
         cv::Mat gradient_depth = sobel_operator(depth_frame_normalized);
         cv::Mat gradient_depth_8UC1 = cv::Mat(depth_frame.size(), CV_8UC1);
-        
+
         gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
         CImage model_image;
         model_image.loadFromIplImage(new IplImage(gradient));
@@ -175,11 +175,11 @@ void TestBayesianTracking()
             cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
                      cv::Scalar(0, 255, 0), 5, 1, 0);
-            
+
             //particles.print_particle_state();
             std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
         }
-        */
+
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);
