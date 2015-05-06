@@ -1,5 +1,8 @@
 #include <signal.h>
 
+#include <cstdlib>
+
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
 #pragma GCC diagnostic ignored "-Wextra"
@@ -19,18 +22,14 @@
 #include <mrpt/obs/CObservationImage.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
-//#define USE_KINECT_2
-#ifdef USE_KINECT_2
-#include <libfreenect2/libfreenect2.hpp>
-#include <libfreenect2/frame_listener_impl.h>
-#endif
-
 #pragma GCC diagnostic pop
 
+#include "KinectCamera.h"
 #include "CImageParticleFilter.h"
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
+#include "faces_detection.h"
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -44,72 +43,30 @@ double TRANSITION_MODEL_STD_XY   = 0;
 double TRANSITION_MODEL_STD_VXY  = 0;
 double NUM_PARTICLES             = 0;
 
-#ifndef USE_KINECT_2
-cv::VideoCapture capture;
-#endif
-
-vector<cv::Vec3f> detect_circles(const cv::Mat &image);
-
-vector<cv::Vec3f> detect_circles(const cv::Mat &image)
-{
-    using namespace cv;
-    Mat src_gray;
-    Mat color = image.clone();
-    cvtColor(image, src_gray, CV_BGR2GRAY);
-    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
-
-    vector<Vec3f> circles;
-    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 50, 0);
-    return circles;
-}
+KinectCamera camera;
 
 void TestBayesianTracking()
 {
-    cv::Mat color_frame;
-    cv::Mat model_frame;
-    cv::Mat depth_frame;
-
-#ifdef USE_KINECT_2
-    libfreenect2::Freenect2 freenect2;
-    std::cout << "kinect2" << std::endl;
-    libfreenect2::Freenect2Device *dev = freenect2.openDefaultDevice();
-
-    if (dev == nullptr) {
-        std::cout << "no device connected or failure opening the default one!" << std::endl;
-        return;
-    }
-
-    libfreenect2::SyncMultiFrameListener listener(libfreenect2::Frame::Color |
-            libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-    libfreenect2::FrameMap frames;
-
-    dev->setColorFrameListener(&listener);
-    dev->setIrAndDepthFrameListener(&listener);
-    dev->start();
-
-    std::cout << "device serial: " << dev->getSerialNumber() << std::endl;
-    std::cout << "device firmware: " << dev->getFirmwareVersion() << std::endl;
-#else
-    capture.open(CV_CAP_OPENNI);
-    capture.set(CV_CAP_OPENNI_IMAGE_GENERATOR_OUTPUT_MODE, CV_CAP_OPENNI_SXGA_15HZ);
+    camera.open();
     struct sigaction sigIntHandler;
-    sigIntHandler.sa_handler = [](int){ capture.release(); exit(0); };
+    sigIntHandler.sa_handler = [](int){std::cout << "SIGINT" << std::endl; camera.close(); std::cout << "SIGINT2" << std::endl;  exit(0); };
     sigemptyset(&sigIntHandler.sa_mask);
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
     sigaction(SIGQUIT, &sigIntHandler, NULL);
     sigaction(SIGSEGV, &sigIntHandler, NULL);
 
-    if (!capture.isOpened()) {
-        return;
-    }
-#endif
+    cv::Mat color_frame;
+    cv::Mat model_frame;
+    cv::Mat depth_frame;
 
     randomGenerator.randomize();
     CDisplayWindow image("image");
+    /*
     CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
     CDisplayWindow depth_window("depth_window");
+    */
 
     // Create PF
     // ----------------------
@@ -127,36 +84,20 @@ void TestBayesianTracking()
     bool init_model = true;
 
     while (!mrpt::system::os::kbhit()) {
-#ifdef USE_KINECT_2
-        listener.waitForNewFrame(frames);
-        libfreenect2::Frame *rgb = frames[libfreenect2::Frame::Color];
-        libfreenect2::Frame *ir = frames[libfreenect2::Frame::Ir];
-        libfreenect2::Frame *depth = frames[libfreenect2::Frame::Depth];
-        color_frame = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
-        depth_frame = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
-#else //kinect 1
-        capture.grab();
-        capture.retrieve(color_frame, CV_CAP_OPENNI_BGR_IMAGE);
-        capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
+        camera.grabFrames();
+        color_frame = camera.frames[KinectCamera::FrameType::COLOR];
+        depth_frame = camera.frames[KinectCamera::FrameType::DEPTH];
+        
         /*
-        capture.retrieve(grey_frame, CV_CAP_OPENNI_GRAY_IMAGE);
-        capture.retrieve(disparity_map, CV_CAP_OPENNI_DISPARITY_MAP);
-        capture.retrieve(depth_frame, CV_CAP_OPENNI_DEPTH_MAP);
-        capture.retrieve(valid_depth_pixels, CV_CAP_OPENNI_VALID_DEPTH_MASK);
-        */
-#endif
-
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
         CObservationImagePtr obsImage2 = CObservationImage::Create();
         obsImage->image.loadFromIplImage(new IplImage(color_frame));
         obsImage2->image.loadFromIplImage(new IplImage(depth_frame));
-
         // memory freed by SF.
         CSensoryFrame SF;
         SF.insert(obsImage);
         SF.insert(obsImage2);
-
         cv::Mat gradient = sobel_operator(color_frame);
 
         double min, max;
@@ -175,7 +116,7 @@ void TestBayesianTracking()
 
         if (init_model) {
             cv::Mat frame_hsv;
-            auto circles = detect_circles(color_frame);
+            auto circles = viola_faces::detect_circles(color_frame);
             if (circles.size()) {
                 int circle_max = 0;
                 double radius_max = circles[0][2];
@@ -238,14 +179,13 @@ void TestBayesianTracking()
             //particles.print_particle_state();
             std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
         }
-    
+        */
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);
-#ifdef USE_KINECT_2
-        listener.release(frames);
-#endif
     }
+
+    camera.close();
 }
 
 
@@ -287,3 +227,4 @@ int main(int argc, char *argv[])
     }
     */
 }
+
