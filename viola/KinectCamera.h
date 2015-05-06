@@ -1,5 +1,7 @@
 #pragma once
 
+#define USE_KINECT_2
+
 #include <map>
 
 #pragma GCC diagnostic push
@@ -15,7 +17,7 @@
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-#define USE_KINECT_2
+
 #ifdef USE_KINECT_2
 #include <libfreenect2/libfreenect2.hpp>
 #include <libfreenect2/frame_listener_impl.h>
@@ -55,4 +57,3 @@ private:
     cv::VideoCapture capture;
 #endif
 };
-
