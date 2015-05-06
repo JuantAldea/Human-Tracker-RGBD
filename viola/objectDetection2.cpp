@@ -244,7 +244,7 @@ int main(void)
         uint32_t depth_sum = 0;
         uint32_t disparity_sum = 0;
 
-for (auto face : detected_faces) {
+        for (auto face : detected_faces) {
             Rect rectangle = face.first;
             Rect rectangle_scaled(rectangle.x * scale_width + rectangle.width * scale_width * 0.05, rectangle.y * scale_height, rectangle.width * scale_width * 0.90, rectangle.height * scale_height);
             Mat faceROI = color_frame(rectangle_scaled);
@@ -330,7 +330,7 @@ for (auto face : detected_faces) {
 
         auto chests = chest_positions_from_face_positions(detected_faces, depth_sum / float(pixel_count));
 
-for (auto chest : chests) {
+        for (auto chest : chests) {
             Rect clamped_rect = clamp_rect_to_image_size(color_frame_SXGA, chest);
             if (clamped_rect.width > 0 && clamped_rect.height > 0) {
                 Mat roi_chest = color_frame_SXGA(clamped_rect);
@@ -503,7 +503,7 @@ Rect clamp_rect_to_image_size(const Mat &img, const Rect &rect)
 vector<Rect> chest_positions_from_face_positions(const faces &detected_faces, const uint32_t depth)
 {
     vector<Rect> chests;
-for (auto detected_face : detected_faces) {
+    for (auto detected_face : detected_faces) {
         const face_shape &f = detected_face.first;
         const Point chest_vertex = chest_position(Point(f.x, f.y), depth);
         chests.push_back(Rect(chest_vertex.x, chest_vertex.y, f.width, f.height * 2.0));
@@ -523,7 +523,7 @@ Point chest_position(const Point head_center, const uint32_t depth)
 
 void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height)
 {
-for (auto detected_face : detected_faces) {
+    for (auto detected_face : detected_faces) {
         face_shape &f = detected_face.first;
         eyes &e = detected_face.second;
         Point center((f.x + f.width / 2 + f.width * 0.50 * 0.05) * scale_width, (f.y + f.height / 2) * scale_height);
@@ -607,7 +607,6 @@ vector<Rect> detect_upper_bodies(const Mat &frame)
     //ellipse(frame, center, Size(upperbodies[i].width / 2, upperbodies[i].height / 2), 0, 0, 360, Scalar(500, 0, 0), 2, 8, 0);
     //}
     return upperbodies;
-
 }
 
 void CannyThreshold(int, void *io)
