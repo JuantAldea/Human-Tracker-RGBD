@@ -41,14 +41,14 @@ void kinect_3d_view()
 {
     mrpt::gui::CDisplayWindow3D win3D("Kinect 3D view", 800, 600);
 
-    win3D.setCameraAzimuthDeg(140);
-    win3D.setCameraElevationDeg(20);
-    win3D.setCameraZoom(8.0);
+    win3D.setCameraAzimuthDeg(0);
+    win3D.setCameraElevationDeg(0);
+    win3D.setCameraZoom(1);
     win3D.setFOV(90);
-    win3D.setCameraPointingToPoint(2.5, 0, 0);
+    win3D.setCameraPointingToPoint(1, 0, 0);
 
     mrpt::opengl::CPointCloudColouredPtr gl_points = mrpt::opengl::CPointCloudColoured::Create();
-    gl_points->setPointSize(10);
+    gl_points->setPointSize(1);
 
     opengl::COpenGLViewportPtr viewRange, viewInt; // Extra viewports for the RGB & D images.
 
@@ -68,18 +68,18 @@ void kinect_3d_view()
         camera.grabFrames();
         cv::Mat depth = camera.frames[KinectCamera::FrameType::DEPTH];
         CColouredPointsMap pntsMap;
-        pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromIntensityImage;
-        float f = 1.f/100000.f;
+        pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
+
         for (int x = 0; x < depth.cols; x++) {
             for (int y = 0; y < depth.rows; y++) {
                 float v_z = depth.at<float>(x, y) / 1000.f;
                 float v_x = ((x - params.cx) * v_z) / params.fx;
                 float v_y = ((y - params.cy) * v_z) / params.fy;
-                v_x *= f;
-                v_y *= f;
-                v_z *= f;
+                v_x *= 1;
+                v_y *= 1;
+                v_z *= 1;
                 //std::cout << v_x << ' ' << v_y << ' ' << v_z << std::endl;
-                pntsMap.insertPoint(v_x, v_z, v_y, 0.5, 0.5, 0.5);
+                pntsMap.insertPoint(v_y, -v_z, -v_x);
             }
 
         }
