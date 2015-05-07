@@ -62,12 +62,11 @@ void TestBayesianTracking()
 
     randomGenerator.randomize();
     CDisplayWindow image("image");
-    /*
+    
     CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
     CDisplayWindow depth_window("depth_window");
-    */
-
+    
     // Create PF
     // ----------------------
     CParticleFilter::TParticleFilterOptions PF_options;
