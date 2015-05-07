@@ -28,7 +28,7 @@
 class KinectCamera
 {
 public:
-    enum class FrameType 
+    enum class FrameType
     {
         COLOR, DEPTH,
         #ifdef USE_KINECT_2
@@ -38,6 +38,36 @@ public:
         #endif
     };
 
+    enum class CameraType
+    {
+        COLOR,
+        IR
+    };
+
+#ifdef USE_KINECT_2
+    using IRCameraParams = libfreenect2::Freenect2Device::IrCameraParams;
+#else
+    struct IRCameraParams
+    {
+        float cx;
+        float cy;
+        float fx;
+        float fy;
+        float k1;
+        float k2;
+        float k3;
+        float p1;
+        float p2;
+        IRCameraParams():
+            cx(0), cy(0), fx(0), fy(0), 
+            k1(0), k2(0), k3(0), 
+            p1(0), p2(0)
+        {
+            ;
+        }
+    };
+#endif
+
     typedef std::map<FrameType, cv::Mat> FrameMap;
     KinectCamera();
     ~KinectCamera();
@@ -45,6 +75,7 @@ public:
     int open();
     void close();
     FrameMap frames;
+    KinectCamera::IRCameraParams getIRCameraParams() const;
 
 private:
 

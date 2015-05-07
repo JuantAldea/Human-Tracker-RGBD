@@ -23,7 +23,7 @@ FIND_PACKAGE(OpenCV REQUIRED)
 FIND_PACKAGE(libfreenect REQUIRED)
 FIND_PACKAGE(freenect2 REQUIRED)
 PKG_CHECK_MODULES(TBB tbb)
-FIND_PACKAGE(MRPT REQUIRED base bayes obs gui)
+FIND_PACKAGE(MRPT REQUIRED base bayes obs gui maps)
 
 INCLUDE_DIRECTORIES({freenect2_INCLUDE_DIR})
 LINK_DIRECTORIES(${viola_SOURCE_DIR})
@@ -33,9 +33,10 @@ ADD_LIBRARY(FacesDetection SHARED faces_detection.cpp)
 ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
+ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 
 #ADD_EXECUTABLE(particle_filter_cd particle_filter_cd.cpp)
-ADD_EXECUTABLE(objectDetection2 objectDetection2.cpp)
+#ADD_EXECUTABLE(objectDetection2 objectDetection2.cpp)
 #ADD_EXECUTABLE(squareDetection  squareDetection.cpp)
 #ADD_EXECUTABLE(particle_filter particle_filter.cpp)
 #ADD_EXECUTABLE(objectDetection  objectDetection.cpp)
@@ -49,10 +50,18 @@ TARGET_LINK_LIBRARIES(particle_filter_main
 	 ${MRPT_LIBS} 
 	 ${OpenCV_LIBS} 
 	 ${TBB_LIBRARIES} 
-	 ${freenect2_LIBRARY})
+	 ${freenect2_LIBRARY}
+ )
+
+TARGET_LINK_LIBRARIES(kinect_3d_view
+	KinectCamera
+	${MRPT_LIBS}
+	${OpenCV_LIBS}
+	${freenect2_LIBRARY}
+)
 
 #TARGET_LINK_LIBRARIES(particle_filter_cd ${MRPT_LIBS} ${OpenCV_LIBS} ${TBB_LIBRARIES} ${freenect2_LIBRARY})
-TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})
+#TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})
 #TARGET_LINK_LIBRARIES(squareDetection ${OpenCV_LIBS})
 #TARGET_LINK_LIBRARIES(particle_filter ${MRPT_LIBS} ${OpenCV_LIBS} ${TBB_LIBRARIES})
 #TARGET_LINK_LIBRARIES(objectDetection ${OpenCV_LIBS})

@@ -82,3 +82,13 @@ void KinectCamera::grabFrames()
         capture.retrieve(frames[FrameType::VALID_DEPTH_MASK], CV_CAP_OPENNI_VALID_DEPTH_MASK);
 #endif
 }
+
+KinectCamera::IRCameraParams KinectCamera::getIRCameraParams() const
+{ 
+    KinectCamera::IRCameraParams params;
+#ifdef USE_KINECT_2
+    params = dev->getIrCameraParams();
+#else
+#endif
+    return params;
+}
