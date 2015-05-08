@@ -68,3 +68,14 @@ TARGET_LINK_LIBRARIES(kinect_3d_view
 #TARGET_LINK_LIBRARIES(openni_capture  ${OpenCV_LIBS})
 #TARGET_LINK_LIBRARIES(hog ${OpenCV_LIBS})
 
+## CONFIG FILE SECTION
+#set(USE_KINECT_2 1)
+
+set(USE_INTEL_TBB 1)
+if(${USE_INTEL_TBB})
+	set(TBB_PARTITIONS 8)
+endif()
+
+configure_file(project_config.h.in project_config.h)
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})

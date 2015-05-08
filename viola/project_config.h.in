@@ -1,0 +1,25 @@
+#pragma once
+
+#define IGNORE_WARNINGS_PUSH \
+	_Pragma("GCC diagnostic push")      \
+	_Pragma("GCC diagnostic ignored \"-Wall\"")      \
+	_Pragma("GCC diagnostic ignored \"-Wextra\"")      \
+	_Pragma("GCC diagnostic ignored \"-Wpedantic\"")      \
+	_Pragma("GCC diagnostic ignored \"-Wunused-parameter\"")      \
+	_Pragma("GCC diagnostic ignored \"-Werror\"")      \
+	_Pragma("GCC diagnostic ignored \"-Wlong-long\"")      \
+	_Pragma("GCC diagnostic ignored \"-pedantic\"")      \
+	_Pragma("GCC diagnostic ignored \"-pedantic-errors\"")      \
+	_Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+
+
+#define IGNORE_WARNINGS_POP _Pragma("GCC diagnostic pop")
+
+
+#cmakedefine USE_INTEL_TBB ${USE_INTEL_TBB}
+#ifdef USE_INTEL_TBB
+#include <tbb/tbb.h>
+#cmakedefine TBB_PARTITIONS ${TBB_PARTITIONS}
+#endif
+
+#cmakedefine USE_KINECT_2 ${USE_KINECT_2}

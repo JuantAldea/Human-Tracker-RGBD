@@ -1,19 +1,9 @@
 #include <signal.h>
-
 #include <cstdlib>
 
+#include "project_config.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Werror"
-#pragma GCC diagnostic ignored "-Wlong-long"
-
-#pragma GCC diagnostic ignored "-pedantic"
-#pragma GCC diagnostic ignored "-pedantic-errors"
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+IGNORE_WARNINGS_PUSH
 
 #include <mrpt/gui/CDisplayWindow.h>
 #include <mrpt/random.h>
@@ -22,7 +12,7 @@
 #include <mrpt/obs/CObservationImage.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
-#pragma GCC diagnostic pop
+IGNORE_WARNINGS_POP
 
 #include "KinectCamera.h"
 #include "CImageParticleFilter.h"
@@ -87,16 +77,15 @@ void TestBayesianTracking()
         color_frame = camera.frames[KinectCamera::FrameType::COLOR];
         depth_frame = camera.frames[KinectCamera::FrameType::DEPTH];
 
-
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
         CObservationImagePtr obsImage2 = CObservationImage::Create();
         obsImage->image.loadFromIplImage(new IplImage(color_frame));
         obsImage2->image.loadFromIplImage(new IplImage(depth_frame));
         // memory freed by SF.
-        CSensoryFrame SF;
-        SF.insert(obsImage);
-        SF.insert(obsImage2);
+        CSensoryFrame observation;
+        observation.insert(obsImage);
+        observation.insert(obsImage2);
         cv::Mat gradient = sobel_operator(color_frame);
 
         double min, max;
@@ -138,7 +127,7 @@ void TestBayesianTracking()
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
                 particles.update_color_model(new cv::Mat(model), radius, radius);
                 particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y,
-                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), &SF);
+                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), &observation);
                 init_model = false;
                 particles.last_time = cv::getTickCount();
 
@@ -155,10 +144,13 @@ void TestBayesianTracking()
             }
         } else {
             // Process in the PF
-            PF.executeOn(particles, NULL, &SF);
+            static CParticleFilter::TParticleFilterStats stats;
+            PF.executeOn(particles, NULL, &observation, &stats);
 
             // Show PF state:
+            cout << "ESS_beforeResample " << stats.ESS_beforeResample << "weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
             cout << "Particle filter ESS: " << particles.ESS() << endl;
+
 
 
             size_t N = particles.m_particles.size();

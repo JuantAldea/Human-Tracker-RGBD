@@ -2,25 +2,20 @@
 
 #include <vector>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Werror"
-#pragma GCC diagnostic ignored "-Wlong-long"
-#pragma GCC diagnostic ignored "-pedantic"
-#pragma GCC diagnostic ignored "-pedantic-errors"
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "project_config.h"
 
+IGNORE_WARNINGS_PUSH
 #include <mrpt/otherlibs/do_opencv_includes.h>
-
-#pragma GCC diagnostic pop
+IGNORE_WARNINGS_POP
 
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int ndims);
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
+vector<Eigen::Vector3d> points_3D_reprojection(const vector<Eigen::Vector2d> &points, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+inline Eigen::Vector3d point_3D_reprojection(const Eigen::Vector2d &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+inline std::tuple<float, float, float> point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+
 
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y)
 {
@@ -42,7 +37,8 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
 
     const int radi_x = cvRound(axis_x / 2.0);
     const int radi_y = cvRound(axis_y / 2.0);
-
+    
+    //TODO USE_INTEL_TBB?
     for (int i = 0; i < nRows; i++) {
         uchar* mask_row = mask.ptr<uchar>(i);
         for (int j = 0; j < nCols; j++) {
@@ -50,12 +46,39 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
         }
     }
 
-    std::vector<cv::Mat> mask_channels(ndims);
-    for (int i = 0; i < ndims; i++) {
-        mask_channels[i] = mask;
-    }
-
+    std::vector<cv::Mat> mask_channels(ndims, mask);
     cv::Mat mask_ndims;
     cv::merge(mask_channels, mask_ndims);
+
     return mask_ndims;
+}
+
+inline std::tuple<float, float, float> point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+{
+    return std::make_tuple((x - cx) * Z * inv_fx, (y - cy) * Z * inv_fy, Z);
+}
+
+inline Eigen::Vector3d point_3D_reprojection(const Eigen::Vector2d &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+{
+    return Eigen::Vector3d((v[0] - cx) * Z * inv_fx, (v[1] - cy) * Z * inv_fy, Z);
+}
+
+vector<Eigen::Vector3d> points_3D_reprojection(const vector<Eigen::Vector2d> &points, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+{
+    const size_t N = points.size();
+    std::vector<Eigen::Vector3d> reprojected_points(N);
+    #ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                reprojected_points[i] = point_3D_reprojection(points[i], Z, inv_fx, inv_fy, cx, cy);
+            }
+        }
+    );
+    #else
+    for (size_t i = 0; i < N; i++){
+        reprojected_points[i] = point_3D_reprojection(points[i], Z,  inv_fx, inv_fy, cx, cy);
+    }
+    #endif
+    return reprojected_points;
 }

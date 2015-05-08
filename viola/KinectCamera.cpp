@@ -1,5 +1,6 @@
+
 #include "KinectCamera.h"
-#include <thread>
+
 int KinectCamera::open()
 {
 #ifdef USE_KINECT_2

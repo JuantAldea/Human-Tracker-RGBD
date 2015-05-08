@@ -1,16 +1,11 @@
 
 #include <limits>
-#include "CImageParticleFilter.h"
 
+#include "CImageParticleFilter.h"
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
 
-#define USE_INTEL_TBB
-#ifdef USE_INTEL_TBB
-#include <tbb/tbb.h>
-#define TBB_PARTITIONS 8
-#endif
 
 void CImageParticleFilter::print_particle_state(void) const
 {
