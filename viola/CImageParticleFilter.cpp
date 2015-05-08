@@ -207,17 +207,28 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
 }
 
 void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, float &vy,
-                                   float &vz) const
+                                   float &vz)
 {
+    auto m_particles_filtered = m_particles;
+    
+    std::sort(m_particles_filtered.begin(), m_particles_filtered.end(), 
+        [this](decltype(m_particles_filtered)::value_type &a, decltype(m_particles_filtered)::value_type &b)
+            { 
+                return a.log_w < b.log_w;
+            }
+    );
+
+    m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.10));
+
     double sumW = 0;
 #ifndef USE_INTEL_TBB
-    for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
+    for (CParticleList::iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
         sumW += exp(it->log_w);
     }
 #else
     sumW = tbb::parallel_reduce(
-        tbb::blocked_range<CParticleList::const_iterator>(m_particles.begin(), m_particles.end(),
-            m_particles.size() / TBB_PARTITIONS), 0.f,
+        tbb::blocked_range<CParticleList::const_iterator>(m_particles_filtered.begin(), m_particles_filtered.end(),
+            m_particles_filtered.size() / TBB_PARTITIONS), 0.f,
                 [](const tbb::blocked_range<CParticleList::const_iterator> &r, double value) -> double {
                     return std::accumulate(r.begin(), r.end(), value,
                         [](double value, const CParticleData &p) -> double {
@@ -237,7 +248,7 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
     vy = 0;
     vz = 0;
 
-    for (CParticleList::const_iterator it = m_particles.begin(); it != m_particles.end(); it++) {
+    for (CParticleList::const_iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
         const double w = exp(it->log_w) / sumW;
         x += float(w * it->d->x);
         y += float(w * it->d->y);
@@ -247,4 +258,5 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
         vy += float(w * it->d->vy);
         vz += float(w * it->d->vz);
     }
+    cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
 }

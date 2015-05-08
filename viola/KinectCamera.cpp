@@ -90,6 +90,10 @@ KinectCamera::IRCameraParams KinectCamera::getIRCameraParams() const
 #ifdef USE_KINECT_2
     params = dev->getIrCameraParams();
 #else
+    params.cx = 316;
+    params.cy = 247;
+    params.fx = 585;
+    params.fy = 585;
 #endif
     return params;
 }

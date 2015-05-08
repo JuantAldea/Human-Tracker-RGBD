@@ -1,16 +1,8 @@
 #pragma once
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Werror"
-#pragma GCC diagnostic ignored "-Wlong-long"
+#include "project_config.h"
 
-#pragma GCC diagnostic ignored "-pedantic"
-#pragma GCC diagnostic ignored "-pedantic-errors"
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+IGNORE_WARNINGS_PUSH
 
 //#include <mrpt/gui/CDisplayWindow.h>
 #include <mrpt/random.h>
@@ -19,7 +11,7 @@
 #include <mrpt/obs/CObservationImage.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
-#pragma GCC diagnostic pop
+IGNORE_WARNINGS_POP
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -70,7 +62,7 @@ public:
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
     
-    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
+    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
     void print_particle_state(void) const;
 
     int64_t last_time;
