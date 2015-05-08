@@ -2,17 +2,9 @@
 
 #include <cstdlib>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Werror"
-#pragma GCC diagnostic ignored "-Wlong-long"
+#include "project_config.h"
 
-#pragma GCC diagnostic ignored "-pedantic"
-#pragma GCC diagnostic ignored "-pedantic-errors"
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+IGNORE_WARNINGS_PUSH
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
@@ -24,7 +16,7 @@
 #include <mrpt/opengl/CPointCloudColoured.h>
 #include <mrpt/base/include/mrpt/system/threads.h>
 
-#pragma GCC diagnostic pop
+IGNORE_WARNINGS_POP
 
 #include "KinectCamera.h"
 
@@ -69,12 +61,13 @@ void kinect_3d_view()
         cv::Mat depth = camera.frames[KinectCamera::FrameType::DEPTH];
         CColouredPointsMap pntsMap;
         pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
-
+        float inv_fx = 1.f / params.fx;
+        float inv_fy = 1.f / params.fy;
         for (int x = 0; x < depth.cols; x++) {
             for (int y = 0; y < depth.rows; y++) {
                 float v_z = depth.at<float>(x, y) / 1000.f;
-                float v_x = ((x - params.cx) * v_z) / params.fx;
-                float v_y = ((y - params.cy) * v_z) / params.fy;
+                float v_x = ((x - params.cx) * v_z) * inv_fx;
+                float v_y = ((y - params.cy) * v_z) * inv_fy;
                 v_x *= 1;
                 v_y *= 1;
                 v_z *= 1;
