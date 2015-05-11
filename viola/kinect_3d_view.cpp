@@ -19,6 +19,7 @@ IGNORE_WARNINGS_PUSH
 IGNORE_WARNINGS_POP
 
 #include "KinectCamera.h"
+#include "geometry_helpers.h"
 
 using namespace mrpt;
 using namespace mrpt::math;
@@ -29,8 +30,14 @@ using namespace mrpt::utils;
 using namespace mrpt::opengl;
 using namespace std;
 
+
+
 void kinect_3d_view()
 {
+    KinectCamera camera;
+    camera.open();
+    camera.grabFrames();
+
     mrpt::gui::CDisplayWindow3D win3D("Kinect 3D view", 800, 600);
 
     win3D.setCameraAzimuthDeg(0);
@@ -52,32 +59,34 @@ void kinect_3d_view()
         win3D.unlockAccess3DScene();
         win3D.repaint();
     }
-    KinectCamera camera;
-    camera.open();
-    camera.grabFrames();
-    KinectCamera::IRCameraParams params = camera.getIRCameraParams();
+
+
+    const KinectCamera::IRCameraParams &params = camera.getIRCameraParams();
+    size_t depth_rows, depth_cols;
+    std::tie(depth_cols, depth_rows) = KinectCamera::getFrameSize(KinectCamera::FrameType::DEPTH);
+    
+    cv::Mat reprojection = cv::Mat(cv::Size(depth_cols, depth_rows), CV_32FC3);    
+    CColouredPointsMap pntsMap;
+    pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
+
     while (win3D.isOpen()) {
         camera.grabFrames();
         cv::Mat depth = camera.frames[KinectCamera::FrameType::DEPTH];
-        cv::Mat color = camera.frames[KinectCamera::FrameType::COLOR];
-        cv::Mat scaled_color;
-        cv::resize(color, scaled_color,depth.size());
-        cout << depth.rows << ' ' << depth.cols << endl;
-        cout << color.rows << ' ' << color.cols << endl;
-        CColouredPointsMap pntsMap;
-        pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
-        float inv_fx = 1.f / params.fx;
-        float inv_fy = 1.f / params.fy;
-        for (int x = 0; x < depth.rows; x++) {
-            for (int y = 0; y < depth.cols; y++) {
+        //cv::Mat color = camera.frames[KinectCamera::FrameType::COLOR];
+        //cv::Mat scaled_color;
+        //cv::resize(color, scaled_color,depth.size());
+        //cout << "DEPTH " << depth.rows << ' ' << depth.cols << endl;
+        //cout << "REPRO " << reprojection.rows << ' ' << reprojection.cols << endl;
+        //cout << "COLOR " << color.rows << ' ' << color.cols << endl;
+        
+        reprojection = depth_3D_reprojection(depth, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
+        pntsMap.clear();
+        for (int x = 0; x < reprojection.rows; x++) {
+            for (int y = 0; y < reprojection.cols; y++) {
                 //cv::Vect3b color = scaled_color.at<cv::Vec3b>(x, y);
-                float v_z = depth.at<float>(x, y) / 1000.f;
-                float v_x = ((x - params.cx) * v_z) * inv_fx;
-                float v_y = ((y - params.cy) * v_z) * inv_fy;
-                //std::cout << v_x << ' ' << v_y << ' ' << v_z << std::endl;
-                pntsMap.insertPoint(v_y, -v_z, -v_x);
+                cv::Vec3f &v = reprojection.at<cv::Vec3f>(x, y);
+                pntsMap.insertPoint(v[1], -v[2], -v[0]);
             }
-
         }
 
         win3D.get3DSceneAndLock();
@@ -85,10 +94,9 @@ void kinect_3d_view()
         win3D.unlockAccess3DScene();
 
         win3D.repaint();
-        mrpt::system::sleep(1);
+        //mrpt::system::sleep(1);
     }
 }
-
 
 //int main(int argc, char *argv[])
 int main()

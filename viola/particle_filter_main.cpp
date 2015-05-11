@@ -4,8 +4,14 @@
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
+#include <mrpt/gui/CDisplayWindow3D.h>
+#include <mrpt/maps/CColouredPointsMap.h>
+#include <mrpt/opengl/CGridPlaneXY.h>
+#include <mrpt/opengl/stock_objects.h>
+#include <mrpt/opengl/CPointCloudColoured.h>
 
 #include <mrpt/gui/CDisplayWindow.h>
+
 #include <mrpt/random.h>
 #include <mrpt/bayes/CParticleFilterData.h>
 #include <mrpt/obs/CSensoryFrame.h>
@@ -26,6 +32,8 @@ using namespace mrpt::bayes;
 using namespace mrpt::gui;
 using namespace mrpt::obs;
 using namespace mrpt::random;
+using namespace mrpt::opengl;
+using namespace mrpt::maps;
 
 using namespace std;
 
@@ -56,6 +64,36 @@ void TestBayesianTracking()
     CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
     CDisplayWindow depth_window("depth_window");
+
+    // -------------------3D view stuff------------------ 
+    CDisplayWindow3D win3D("Kinect 3D view", 800, 600);
+
+    win3D.setCameraAzimuthDeg(0);
+    win3D.setCameraElevationDeg(0);
+    win3D.setCameraZoom(1);
+    win3D.setFOV(90);
+    win3D.setCameraPointingToPoint(1, 0, 0);
+
+    mrpt::opengl::CPointCloudColouredPtr gl_points = mrpt::opengl::CPointCloudColoured::Create();
+    gl_points->setPointSize(0.5);
+
+    opengl::COpenGLViewportPtr viewRange, viewInt; // Extra viewports for the RGB & D images.
+
+    {
+        mrpt::opengl::COpenGLScenePtr &scene = win3D.get3DSceneAndLock();
+        scene->insert(gl_points);
+        scene->insert(mrpt::opengl::CGridPlaneXY::Create());
+        scene->insert(mrpt::opengl::stock_objects::CornerXYZ());
+        win3D.unlockAccess3DScene();
+        win3D.repaint();
+    }
+
+    size_t depth_rows, depth_cols;
+    std::tie(depth_cols, depth_rows) = KinectCamera::getFrameSize(KinectCamera::FrameType::DEPTH);
+    
+    CColouredPointsMap pntsMap;
+    pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
+    const KinectCamera::IRCameraParams &params = camera.getIRCameraParams();
     
     // Create PF
     // ----------------------
@@ -151,12 +189,8 @@ void TestBayesianTracking()
             cout << "ESS_beforeResample " << stats.ESS_beforeResample << "weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
             cout << "Particle filter ESS: " << particles.ESS() << endl;
 
-
-
             size_t N = particles.m_particles.size();
             for (size_t i = 0; i < N; i++) {
-                particles.m_particles[i].d->x;
-                particles.m_particles[i].d->y;
                 cv::circle(color_frame, cv::Point(particles.m_particles[i].d->x,
                                                   particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
             }
@@ -174,6 +208,28 @@ void TestBayesianTracking()
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);
+
+        //--- 3D view stuff
+        cv::Mat reprojection = depth_3D_reprojection(depth_frame, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
+        pntsMap.clear();
+        for (int x = 0; x < reprojection.rows; x++) {
+            for (int y = 0; y < reprojection.cols; y++) {
+                //cv::Vect3b color = scaled_color.at<cv::Vec3b>(x, y);
+                cv::Vec3f &v = reprojection.at<cv::Vec3f>(x, y);
+                pntsMap.insertPoint(v[1], -v[2], -v[0]);
+                //pntsMap.insertPoint(x/1000.0, 1, y/1000.0);
+            }
+        }
+
+        size_t N = particles.m_particles.size();
+        for (size_t i = 0; i < N; i++) {
+        }
+
+        win3D.get3DSceneAndLock();
+        gl_points->loadFromPointsMap(&pntsMap);
+        win3D.unlockAccess3DScene();
+        win3D.repaint();
+        //mrpt::system::sleep(1);
     }
 
     camera.close();

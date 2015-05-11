@@ -67,6 +67,8 @@ public:
     FrameMap frames;
     KinectCamera::IRCameraParams getIRCameraParams() const;
 
+    static std::pair<int, int> getFrameSize(FrameType type);
+
 private:
 
 #ifdef USE_KINECT_2

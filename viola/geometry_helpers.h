@@ -12,10 +12,11 @@ IGNORE_WARNINGS_POP
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int ndims);
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
-vector<Eigen::Vector3d> points_3D_reprojection(const vector<Eigen::Vector2d> &points, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
-inline Eigen::Vector3d point_3D_reprojection(const Eigen::Vector2d &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
-inline std::tuple<float, float, float> point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
 
+inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+inline Eigen::Vector3f  point_3D_reprojection(const Eigen::Vector2f &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy);
+cv::Mat depth_3D_reprojection(const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy);
 
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y)
 {
@@ -53,32 +54,68 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
     return mask_ndims;
 }
 
-inline std::tuple<float, float, float> point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
-    return std::make_tuple((x - cx) * Z * inv_fx, (y - cy) * Z * inv_fy, Z);
+    return Eigen::Vector3f((x - cx) * Z * inv_fx, (y - cy) * Z * inv_fy, Z);
 }
 
-inline Eigen::Vector3d point_3D_reprojection(const Eigen::Vector2d &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+inline Eigen::Vector3f point_3D_reprojection(const Eigen::Vector2f &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
-    return Eigen::Vector3d((v[0] - cx) * Z * inv_fx, (v[1] - cy) * Z * inv_fy, Z);
+    return Eigen::Vector3f((v[0] - cx) * Z * inv_fx, (v[1] - cy) * Z * inv_fy, Z);
 }
 
-vector<Eigen::Vector3d> points_3D_reprojection(const vector<Eigen::Vector2d> &points, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy)
+std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
     const size_t N = points.size();
-    std::vector<Eigen::Vector3d> reprojected_points(N);
-    #ifdef USE_INTEL_TBB
+    std::vector<Eigen::Vector3f> reprojected_points(N);
+#ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [&](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
-                reprojected_points[i] = point_3D_reprojection(points[i], Z, inv_fx, inv_fy, cx, cy);
+                //TODO depth_data.at<float>(points[i][1], points[i][0]) or the other way around?
+                reprojected_points[i] = point_3D_reprojection(points[i], depth_data.at<float>(points[i][1], points[i][0]), inv_fx, inv_fy, cx, cy);
             }
         }
     );
-    #else
+#else
     for (size_t i = 0; i < N; i++){
         reprojected_points[i] = point_3D_reprojection(points[i], Z,  inv_fx, inv_fy, cx, cy);
     }
-    #endif
+#endif
     return reprojected_points;
 }
+
+
+cv::Mat depth_3D_reprojection(const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy)
+{
+    cv::Mat reprojection = cv::Mat(depth_data.size(), CV_32FC3);
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<int>(0, depth_data.rows, depth_data.rows / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<int> &r){
+            for (int x = r.begin(); x < r.end(); x++) {
+                const float *p_depth = depth_data.ptr<float>(x);
+                cv::Vec3f *p_reprojection = reprojection.ptr<cv::Vec3f>(x);
+                for (int y = 0; y < depth_data.cols; y++) {
+                    cv::Vec3f &v = p_reprojection[y];
+                    v[2] = p_depth[y] / 1000.f;
+                    v[1] = ((y - cy) * v[2]) * inv_fy;
+                    v[0] = ((x - cx) * v[2]) * inv_fx;
+                }
+            }
+        }
+    );
+#else
+    for (int x = 0; x < depth_data.rows; x++) {
+        const float *p_depth = depth_data.ptr<float>(x);
+        cv::Vec3f *p_reprojection = reprojection.ptr<cv::Vec3f>(x);
+        for (int y = 0; y < depth_data.cols; y++) {
+            cv::Vec3f &v = p_reprojection[y];
+            v[2] = p_depth[y] / 1000.f;
+            v[1] = ((y - params.cy) * v[2]) * inv_fy;
+            v[0] = ((x - params.cx) * v[2]) * inv_fx;
+        }
+    }
+#endif
+    return reprojection;
+}
+

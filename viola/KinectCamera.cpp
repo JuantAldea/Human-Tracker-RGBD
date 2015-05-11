@@ -97,3 +97,13 @@ KinectCamera::IRCameraParams KinectCamera::getIRCameraParams() const
 #endif
     return params;
 }
+
+
+std::pair<int, int> KinectCamera::getFrameSize(const FrameType type)
+{
+    switch(type){
+        case FrameType::DEPTH: return std::make_pair(512, 424);
+        default: return std::make_pair(0, 0);
+    }
+    
+}
