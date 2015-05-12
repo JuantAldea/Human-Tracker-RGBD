@@ -11,6 +11,8 @@ IGNORE_WARNINGS_PUSH
 #ifdef USE_KINECT_2
 #include <libfreenect2/libfreenect2.hpp>
 #include <libfreenect2/frame_listener_impl.h>
+#include <libfreenect2/threading.h>
+#include <libfreenect2/registration.h>
 #endif
 
 IGNORE_WARNINGS_POP
@@ -35,6 +37,7 @@ public:
     };
 
 #ifdef USE_KINECT_2
+    using ColorCameraParams = libfreenect2::Freenect2Device::ColorCameraParams;
     using IRCameraParams = libfreenect2::Freenect2Device::IrCameraParams;
 #else
     struct IRCameraParams
@@ -65,7 +68,8 @@ public:
     int open();
     void close();
     FrameMap frames;
-    KinectCamera::IRCameraParams getIRCameraParams() const;
+    IRCameraParams getIRCameraParams() const;
+    KinectCamera::ColorCameraParams getColorCameraParams() const;
 
     static std::pair<int, int> getFrameSize(FrameType type);
 

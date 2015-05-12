@@ -42,6 +42,7 @@ void KinectCamera::close()
 
 KinectCamera::KinectCamera()
 {
+    //TODO CORRECT WITH THE REAL SIZES
     frames[FrameType::COLOR] = cv::Mat::ones(640, 480, CV_8UC3);
     frames[FrameType::DEPTH] = cv::Mat::ones(640, 480, CV_32F);
 #ifdef USE_KINECT_2
@@ -89,6 +90,21 @@ KinectCamera::IRCameraParams KinectCamera::getIRCameraParams() const
     KinectCamera::IRCameraParams params;
 #ifdef USE_KINECT_2
     params = dev->getIrCameraParams();
+#else
+    params.cx = 316;
+    params.cy = 247;
+    params.fx = 585;
+    params.fy = 585;
+#endif
+    return params;
+}
+
+
+KinectCamera::ColorCameraParams KinectCamera::KinectCamera::getColorCameraParams() const
+{ 
+    KinectCamera::ColorCameraParams params;
+#ifdef USE_KINECT_2
+    params = dev->getColorCameraParams();
 #else
     params.cx = 316;
     params.cy = 247;
