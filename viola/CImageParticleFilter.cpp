@@ -215,11 +215,16 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
     std::sort(m_particles_filtered.begin(), m_particles_filtered.end(), 
         [this](decltype(m_particles_filtered)::value_type &a, decltype(m_particles_filtered)::value_type &b)
             { 
-                return a.log_w < b.log_w;
+                return a.log_w > b.log_w;
             }
     );
 
     m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.1));
+
+    for (CParticleList::iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
+        cout << exp(it->log_w) << ' ';
+    }
+    cout << endl;
 
     double sumW = 0;
 #ifndef USE_INTEL_TBB

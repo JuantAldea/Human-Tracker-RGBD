@@ -45,7 +45,10 @@ KinectCamera camera;
 
 void TestBayesianTracking()
 {
-    camera.open();
+    if(-1 == camera.open()){
+        exit(-1);
+    }
+
     struct sigaction sigIntHandler;
     sigIntHandler.sa_handler = [](int){std::cout << "SIGINT" << std::endl; camera.close(); std::cout << "SIGINT2" << std::endl;  exit(0); };
     sigemptyset(&sigIntHandler.sa_mask);
@@ -191,21 +194,22 @@ void TestBayesianTracking()
             
             //model update
             {
-                avrg_ry = avrg_rx = radius;
+                const cv::Rect model_roi_ellipse(avrg_x - avrg_rx, avrg_y - avrg_ry, 2 * avrg_rx, 2 * avrg_ry);
                 cv::Mat frame_hsv;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect model_roi(avrg_x - avrg_rx, avrg_y - avrg_ry, 2 * avrg_rx, 2 * avrg_ry);
+                const cv::Rect model_roi(avrg_x - radius, avrg_y - radius, 2 * radius, 2 * radius);
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
-                particles.update_color_model(new cv::Mat(model), avrg_rx, avrg_ry);
+                //particles.update_color_model(new cv::Mat(model), radius, radius);
                 model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
                 const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
                 bitwise_and(color_frame(model_roi), ones, model_frame, mask);
-
+                cv::ellipse(color_frame, cv::Point(avrg_x, avrg_y), cv::Size(avrg_rx, avrg_ry), 0, 0, 360, cv::Scalar(255, 0, 0));
                 //cv::Mat gradient = sobel_operator(color_frame(model_roi));
                 //model_window.showImage(CImage(new IplImage(gradient)));
                 CImage model_frame;
-                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                cv::Mat model_mat = color_frame(model_roi);
+                model_frame.loadFromIplImage(new IplImage(model_mat));
                 model_image_window.showImage(model_frame);
             }
 
