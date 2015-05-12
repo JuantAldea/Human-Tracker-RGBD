@@ -109,7 +109,7 @@ void TestBayesianTracking()
     CImageParticleFilter particles;
 
     bool init_model = true;
-
+    int radius = 0;
     while (!mrpt::system::os::kbhit()) {
         camera.grabFrames();
         color_frame = camera.frames[KinectCamera::FrameType::COLOR];
@@ -139,9 +139,9 @@ void TestBayesianTracking()
         depth_image.loadFromIplImage(new IplImage(gradient_depth_8UC1));
         model_window.showImage(model_image);
         depth_window.showImage(depth_image);
-
+        
         if (init_model) {
-            cv::Mat frame_hsv;
+            
             auto circles = viola_faces::detect_circles(color_frame);
             if (circles.size()) {
                 int circle_max = 0;
@@ -157,8 +157,9 @@ void TestBayesianTracking()
                     }
                 }
                 cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
-                int radius = cvRound(circles[circle_max][2]);
+                radius = cvRound(circles[circle_max][2]);
                 cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
+                cv::Mat frame_hsv;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
                 const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
@@ -184,9 +185,32 @@ void TestBayesianTracking()
             // Process in the PF
             static CParticleFilter::TParticleFilterStats stats;
             PF.executeOn(particles, NULL, &observation, &stats);
+            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz, avrg_rx, avrg_ry;
+            particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz, avrg_rx, avrg_ry);
+            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << ' ' << avrg_rx << ' ' << avrg_ry << std::endl;
+            
+            //model update
+            {
+                avrg_ry = avrg_rx = radius;
+                cv::Mat frame_hsv;
+                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
+                const cv::Rect model_roi(avrg_x - avrg_rx, avrg_y - avrg_ry, 2 * avrg_rx, 2 * avrg_ry);
+                const cv::Mat mask = create_ellipse_mask(model_roi, 1);
+                const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
+                particles.update_color_model(new cv::Mat(model), avrg_rx, avrg_ry);
+                model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
+                const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
+                bitwise_and(color_frame(model_roi), ones, model_frame, mask);
+
+                //cv::Mat gradient = sobel_operator(color_frame(model_roi));
+                //model_window.showImage(CImage(new IplImage(gradient)));
+                CImage model_frame;
+                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                model_image_window.showImage(model_frame);
+            }
 
             // Show PF state:
-            cout << "ESS_beforeResample " << stats.ESS_beforeResample << "weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
+            cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
             cout << "Particle filter ESS: " << particles.ESS() << endl;
 
             size_t N = particles.m_particles.size();
@@ -195,14 +219,12 @@ void TestBayesianTracking()
                                                   particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
             }
 
-            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-            particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
             cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
                      cv::Scalar(0, 255, 0), 5, 1, 0);
 
             //particles.print_particle_state();
-            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
+
         }
 
         CImage frame_particles;

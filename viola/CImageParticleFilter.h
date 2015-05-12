@@ -62,7 +62,7 @@ public:
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
     
-    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
+    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz, float &rx, float &ry);
     void print_particle_state(void) const;
 
     int64_t last_time;

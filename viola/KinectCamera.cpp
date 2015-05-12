@@ -106,6 +106,7 @@ KinectCamera::ColorCameraParams KinectCamera::KinectCamera::getColorCameraParams
 #ifdef USE_KINECT_2
     params = dev->getColorCameraParams();
 #else
+    //TODO WRONG!
     params.cx = 316;
     params.cy = 247;
     params.fx = 585;

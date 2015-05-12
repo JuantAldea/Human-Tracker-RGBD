@@ -206,8 +206,9 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
     }
 }
 
+
 void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, float &vy,
-                                   float &vz)
+                                   float &vz, float &r_x, float &r_y)
 {
     auto m_particles_filtered = m_particles;
     
@@ -218,7 +219,7 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
             }
     );
 
-    m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.10));
+    m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.1));
 
     double sumW = 0;
 #ifndef USE_INTEL_TBB
@@ -247,6 +248,8 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
     vx = 0;
     vy = 0;
     vz = 0;
+    r_x = 0;
+    r_y = 0;
 
     for (CParticleList::const_iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
         const double w = exp(it->log_w) / sumW;
@@ -257,6 +260,25 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
         vx += float(w * it->d->vx);
         vy += float(w * it->d->vy);
         vz += float(w * it->d->vz);
+
+        r_x += float(w * std::abs(it->d->x - x));
+        r_y += float(w * std::abs(it->d->y - y));
     }
+
+    for (CParticleList::const_iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
+        const double w = exp(it->log_w) / sumW;
+        r_x += w * ((it->d->x - x) * (it->d->x - x));
+        r_y += w * ((it->d->y - y) * (it->d->y - y));
+    }
+/*
+    r_x -= m_particles_filtered.size() * x * x;
+    r_y -= m_particles_filtered.size() * y * y;
+    
+    r_x /= float(m_particles_filtered.size()  - 1);
+    r_y /= float(m_particles_filtered.size()  - 1);
+*/
+    r_x = std::sqrt(r_x);
+    r_y = std::sqrt(r_y);
+
     cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
 }

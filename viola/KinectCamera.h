@@ -59,6 +59,8 @@ public:
             ;
         }
     };
+    //TODO WRONG!
+    using ColorCameraParams = IRCameraParams;
 #endif
 
     typedef std::map<FrameType, cv::Mat> FrameMap;
