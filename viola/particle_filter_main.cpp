@@ -11,16 +11,20 @@ IGNORE_WARNINGS_PUSH
 #include <mrpt/opengl/CPointCloudColoured.h>
 
 #include <mrpt/gui/CDisplayWindow.h>
-
 #include <mrpt/random.h>
 #include <mrpt/bayes/CParticleFilterData.h>
 #include <mrpt/obs/CSensoryFrame.h>
 #include <mrpt/obs/CObservationImage.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
+#include <libfreenect2/libfreenect2.hpp>
+#include <libfreenect2/frame_listener_impl.h>
+#include <libfreenect2/threading.h>
+#include <libfreenect2/registration.h>
+
 IGNORE_WARNINGS_POP
 
-#include "KinectCamera.h"
+//#include "KinectCamera.h"
 #include "CImageParticleFilter.h"
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
@@ -41,18 +45,69 @@ double TRANSITION_MODEL_STD_XY   = 0;
 double TRANSITION_MODEL_STD_VXY  = 0;
 double NUM_PARTICLES             = 0;
 
-KinectCamera camera;
+libfreenect2::Freenect2Device *dev;
+libfreenect2::Freenect2 freenect2;
+libfreenect2::SyncMultiFrameListener *listener;
+libfreenect2::FrameMap frames_kinect2;
+
+void close_kinect2_handler(void)
+{
+    dev->stop();
+    dev->close();
+    listener->release(frames_kinect2);
+}
+
+/*
+void grab_kinect2_frames(){
+    listener->release(frames_kinect2);
+    listener->waitForNewFrame(frames_kinect2);
+    const libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
+    const libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
+    const libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
+    cv::Mat color = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
+    cv::Mat depth = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
+    cv::Mat ir = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data); 
+}
+*/
 
 void TestBayesianTracking()
 {
-    camera.open();
+    dev = freenect2.openDefaultDevice();
+
+    if (dev == nullptr) {
+        std::cout << "no device connected or failure opening the default one!" << std::endl;
+        exit(-1);
+    }
+
+    listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+    dev->setColorFrameListener(listener);
+    dev->setIrAndDepthFrameListener(listener);
+    dev->start();
+
+    libfreenect2::Freenect2Device::ColorCameraParams color_camera_params = dev->getColorCameraParams();
+    libfreenect2::Freenect2Device::IrCameraParams ir_camera_params = dev->getIrCameraParams();
+
+    libfreenect2::Registration *registration = new libfreenect2::Registration(ir_camera_params, color_camera_params);
+    unsigned char* registered = nullptr;
+
     struct sigaction sigIntHandler;
-    sigIntHandler.sa_handler = [](int){std::cout << "SIGINT" << std::endl; camera.close(); std::cout << "SIGINT2" << std::endl;  exit(0); };
+    
+    sigIntHandler.sa_handler = [](int){
+        std::cout << "SIGINT" << std::endl;
+        close_kinect2_handler();
+        std::cout << "SIGINT2" << std::endl; 
+        exit(0); 
+    };
+
+
     sigemptyset(&sigIntHandler.sa_mask);
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
     sigaction(SIGQUIT, &sigIntHandler, NULL);
     sigaction(SIGSEGV, &sigIntHandler, NULL);
+    
+    //atexit(close_kinect2_handler);
+    at_quick_exit(close_kinect2_handler);
 
     cv::Mat color_frame;
     cv::Mat model_frame;
@@ -64,6 +119,7 @@ void TestBayesianTracking()
     CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
     CDisplayWindow depth_window("depth_window");
+    CDisplayWindow registered_color("registered_color");
 
     // -------------------3D view stuff------------------ 
     CDisplayWindow3D win3D("Kinect 3D view", 800, 600);
@@ -88,12 +144,10 @@ void TestBayesianTracking()
         win3D.repaint();
     }
 
-    size_t depth_rows, depth_cols;
-    std::tie(depth_cols, depth_rows) = KinectCamera::getFrameSize(KinectCamera::FrameType::DEPTH);
     
     CColouredPointsMap pntsMap;
-    pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromHeightRelativeToSensor;
-    const KinectCamera::IRCameraParams &params = camera.getIRCameraParams();
+    pntsMap.colorScheme.scheme = CColouredPointsMap::cmFromIntensityImage;
+
     
     // Create PF
     // ----------------------
@@ -111,9 +165,26 @@ void TestBayesianTracking()
     bool init_model = true;
 
     while (!mrpt::system::os::kbhit()) {
-        camera.grabFrames();
-        color_frame = camera.frames[KinectCamera::FrameType::COLOR];
-        depth_frame = camera.frames[KinectCamera::FrameType::DEPTH];
+        listener->release(frames_kinect2);
+        listener->waitForNewFrame(frames_kinect2);
+        
+        libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
+        libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
+        libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
+        
+        if (registered == nullptr){
+            registered = new unsigned char[depth->height * depth->width * rgb->bytes_per_pixel];
+        }
+        
+        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
+        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
+        cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
+
+        registration->apply(rgb, depth, registered);
+        cv::Mat registered_color_mat = cv::Mat(depth->height, depth->width, CV_8UC3, registered);
+        
+        color_frame = color_mat;
+        depth_frame = depth_mat;
 
         // Process with PF:
         CObservationImagePtr obsImage = CObservationImage::Create();
@@ -135,10 +206,16 @@ void TestBayesianTracking()
         gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
         CImage model_image;
         model_image.loadFromIplImage(new IplImage(gradient));
+        model_window.showImage(model_image);
+        
         CImage depth_image;
         depth_image.loadFromIplImage(new IplImage(gradient_depth_8UC1));
-        model_window.showImage(model_image);
         depth_window.showImage(depth_image);
+        
+        CImage registered_color_image;
+        registered_color_image.loadFromIplImage(new IplImage(registered_color_mat));
+        registered_color.showImage(registered_color_image);
+        
 
         if (init_model) {
             cv::Mat frame_hsv;
@@ -210,14 +287,13 @@ void TestBayesianTracking()
         image.showImage(frame_particles);
 
         //--- 3D view stuff
-        cv::Mat reprojection = depth_3D_reprojection(depth_frame, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
+        cv::Mat reprojection = depth_3D_reprojection(depth_frame, 1.f/ir_camera_params.fx, 1.f/ir_camera_params.fy, ir_camera_params.cx, ir_camera_params.cy);
         pntsMap.clear();
         for (int x = 0; x < reprojection.rows; x++) {
             for (int y = 0; y < reprojection.cols; y++) {
-                //cv::Vect3b color = scaled_color.at<cv::Vec3b>(x, y);
+                cv::Vec3b color = registered_color_mat.at<cv::Vec3b>(x, y);
                 cv::Vec3f &v = reprojection.at<cv::Vec3f>(x, y);
-                pntsMap.insertPoint(v[1], -v[2], -v[0]);
-                //pntsMap.insertPoint(x/1000.0, 1, y/1000.0);
+                pntsMap.insertPoint(v[1], -v[2], -v[0], color[2]/255.0, color[1] / 255.0, color[0] / 255.0);
             }
         }
 
@@ -232,7 +308,7 @@ void TestBayesianTracking()
         //mrpt::system::sleep(1);
     }
 
-    camera.close();
+    close_kinect2_handler();
 }
 
 
