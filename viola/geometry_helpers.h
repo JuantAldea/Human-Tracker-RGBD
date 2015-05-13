@@ -5,17 +5,24 @@
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
+
 #include <mrpt/otherlibs/do_opencv_includes.h>
+
 IGNORE_WARNINGS_POP
 
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int ndims);
+
 cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int ndims);
+
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y);
 
 inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+
 inline Eigen::Vector3f  point_3D_reprojection(const Eigen::Vector2f &v, const float Z, const float inv_fx, const float inv_fy, const float cx, const float cy);
+
 std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy);
+
 cv::Mat depth_3D_reprojection(const cv::Mat &depth_data, const float inv_fx, const float inv_fy, const float cx, const float cy);
 
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const int radi_x, const int radi_y)

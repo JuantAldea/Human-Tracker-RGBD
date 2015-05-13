@@ -298,7 +298,21 @@ void TestBayesianTracking()
         }
 
         size_t N = particles.m_particles.size();
+        vector<tuple<float, float>> particles_vectors(N);
         for (size_t i = 0; i < N; i++) {
+            particles_vectors[i] = make_tuple(particles.m_particles[i].d->x, particles.m_particles[i].d->y);
+            float x, y;
+            std::tie(x, y) = particles_vectors[i];
+            cout << "DISTORTED " << x << ' ' << y << endl;
+        }
+        vector<tuple<float, float, float>> particles_vectors_reprojected(N);
+        registration->apply(particles_vectors, depth, particles_vectors_reprojected);
+        
+        for (size_t i = 0; i < particles_vectors_reprojected.size(); i++) {
+            float x, y, z;
+            std::tie(x, y, z) = particles_vectors_reprojected[i];
+            cout << x << ' ' << y << ' ' << z << endl;
+            pntsMap.insertPoint(y, -z, 0, 1, 0, 0);
         }
 
         win3D.get3DSceneAndLock();
