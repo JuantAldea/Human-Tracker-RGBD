@@ -1,7 +1,7 @@
 #pragma once
 
 #include <map>
-
+#include <string>
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
@@ -66,6 +66,8 @@ public:
     ~KinectCamera();
     void grabFrames();
     int open();
+    int open(const std::string &serial);
+    int open(const int id);
     void close();
     FrameMap frames;
     IRCameraParams getIRCameraParams() const;

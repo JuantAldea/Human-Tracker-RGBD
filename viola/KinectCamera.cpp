@@ -1,10 +1,29 @@
 
 #include "KinectCamera.h"
+#include <iostream>
 
 int KinectCamera::open()
 {
+    return open(std::string());
+}
+
+int KinectCamera::open(const int id)
+{
 #ifdef USE_KINECT_2
-    dev = freenect2.openDefaultDevice();
+    return open(freenect2.getDeviceSerialNumber(id));
+#else
+    return open();
+#endif
+}
+
+int KinectCamera::open(const std::string &serial)
+{
+#ifdef USE_KINECT_2
+    if (serial.length() == 0){
+        dev = freenect2.openDefaultDevice();
+    }else{
+        dev = freenect2.openDevice(serial);
+    }
 
     if (dev == nullptr) {
         std::cout << "no device connected or failure opening the default one!" << std::endl;
@@ -46,6 +65,7 @@ KinectCamera::KinectCamera()
     frames[FrameType::COLOR] = cv::Mat::ones(640, 480, CV_8UC3);
     frames[FrameType::DEPTH] = cv::Mat::ones(640, 480, CV_32F);
 #ifdef USE_KINECT_2
+    freenect2.enumerateDevices();
     listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
     frames[FrameType::IR] = cv::Mat::ones(640, 480, CV_8UC3);
 #else

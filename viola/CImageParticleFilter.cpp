@@ -44,8 +44,12 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
                                randomGenerator.drawGaussian1D_normalized();
 
         const double old_z = m_particles[i].d->z;
+        //TODO FIX THIS?, use proper mapping
+        //don't remember if it's being used, depth should be mapped into color
         const int x = cvRound((m_particles[i].d->x * depth_mat.cols) / float(image_mat.cols));
         const int y = cvRound((m_particles[i].d->y * depth_mat.rows) / float(image_mat.rows));
+
+        //TODO can x, y go outside of the frame?
         m_particles[i].d->z = depth_mat.at<unsigned short>(y, x);
 
         m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
@@ -210,7 +214,7 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
                                    float &vz)
 {
     auto m_particles_filtered = m_particles;
-    
+    /*
     std::sort(m_particles_filtered.begin(), m_particles_filtered.end(), 
         [this](decltype(m_particles_filtered)::value_type &a, decltype(m_particles_filtered)::value_type &b)
             { 
@@ -219,7 +223,7 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
     );
 
     m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.10));
-
+    */
     double sumW = 0;
 #ifndef USE_INTEL_TBB
     for (CParticleList::iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
@@ -238,7 +242,7 @@ void CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, flo
             std::plus<double>()
         );
 #endif
-
+    std::cout << "MEAN WEIGHT " << sumW / m_particles.size() << std::endl;
     ASSERT_(sumW > 0)
 
     x = 0;
