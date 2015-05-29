@@ -62,7 +62,8 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
             for (size_t i = r.begin(); i != r.end(); i++) {
                 update_particle(i);
             }
-    });
+        }
+    );
 #else
     for (size_t i = 0; i < N; i++) {
         update_particle(i);
@@ -234,7 +235,8 @@ float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, fl
                     return std::accumulate(r.begin(), r.end(), value,
                         [](double value, const CParticleData &p) -> double {
                             return exp(p.log_w) + value;
-                        });
+                        }
+                    );
                 },
             std::plus<double>()
         );
