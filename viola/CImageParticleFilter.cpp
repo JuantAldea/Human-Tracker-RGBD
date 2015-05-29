@@ -56,17 +56,17 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
     };
 
     size_t N = m_particles.size();
-#ifndef USE_INTEL_TBB
-    for (size_t i = 0; i < N; i++) {
-        update_particle(i);
-    }
-#else
+#ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [&update_particle](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 update_particle(i);
             }
     });
+#else
+    for (size_t i = 0; i < N; i++) {
+        update_particle(i);
+    }
 #endif
 }
 
@@ -83,29 +83,7 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
 
     size_t N = m_particles.size();
 
-#ifndef USE_INTEL_TBB
-    vector <cv::Mat> particles_color_model(N);
-    for (size_t i = 0; i < N; i++) {
-        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
-                                    m_particles[i].d->y - roi_height * 0.5,
-                                    roi_width, roi_height);
-
-        if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
-                || particle_roi.height <= 0) {
-            continue;
-        }
-
-        if (particle_roi.x + particle_roi.width >= frame_hsv.cols
-                || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-            continue;
-        }
-
-        const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-        const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
-        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-    }
-#else
+#ifdef USE_INTEL_TBB
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
         [this, &frame_hsv, &particles_color_model](const tbb::blocked_range<size_t> &r) {
@@ -129,6 +107,28 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
             }
         }
     );
+#else
+    vector <cv::Mat> particles_color_model(N);
+    for (size_t i = 0; i < N; i++) {
+        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
+                                    m_particles[i].d->y - roi_height * 0.5,
+                                    roi_width, roi_height);
+
+        if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
+                || particle_roi.height <= 0) {
+            continue;
+        }
+
+        if (particle_roi.x + particle_roi.width >= frame_hsv.cols
+                || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
+            continue;
+        }
+
+        const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
+        const cv::Mat particle_roi_img = frame_hsv(particle_roi);
+
+        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+    }
 #endif
 
     //third, weight them
@@ -142,12 +142,8 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
             m_particles[i].log_w += log(std::numeric_limits<double>::min());
         }
     };
-//#ifndef USE_INTEL_TBB
-    for (size_t i = 0; i < N; i++) {
-        weight_particle(i);
-    }
 /*
-#else
+#ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [this, &particles_color_model, &weight_particle](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
@@ -155,8 +151,13 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
             }
         }
     );
-#endif
+#else
 */
+    for (size_t i = 0; i < N; i++) {
+        weight_particle(i);
+    }
+//#endif
+
 }
 
 void CImageParticleFilter::prediction_and_update_pfStandardProposal(
@@ -225,14 +226,7 @@ float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, fl
     //m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.20));
     
     double sumW = 0;
-#ifndef USE_INTEL_TBB
-    //std::cout << "SORTED ########################################################" << std::endl;
-    for (CParticleList::iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
-        //std::cout << "SORTED " << exp(it->log_w) << std::endl;
-        sumW += exp(it->log_w);
-    }
-
-#else
+#ifdef USE_INTEL_TBB
     sumW = tbb::parallel_reduce(
         tbb::blocked_range<CParticleList::const_iterator>(m_particles_filtered.begin(), m_particles_filtered.end(),
             m_particles_filtered.size() / TBB_PARTITIONS), 0.f,
@@ -244,7 +238,14 @@ float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, fl
                 },
             std::plus<double>()
         );
+#else
+    //std::cout << "SORTED ########################################################" << std::endl;
+    for (CParticleList::iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
+        //std::cout << "SORTED " << exp(it->log_w) << std::endl;
+        sumW += exp(it->log_w);
+    }
 #endif
+
     std::cout << "MEAN WEIGHT " << sumW / m_particles.size() << std::endl;
     ASSERT_(sumW > 0)
 
