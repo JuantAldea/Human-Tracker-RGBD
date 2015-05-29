@@ -49,7 +49,11 @@ FIND_PACKAGE(MRPT REQUIRED base bayes obs gui maps)
 #INCLUDE_DIRECTORIES(${freenect2_INCLUDE_DIR})
 LINK_DIRECTORIES(${viola_SOURCE_DIR})
 
-ADD_LIBRARY(ImageParticleFilter SHARED CImageParticleFilter.cpp)
+ADD_LIBRARY(ImageParticleFilter STATIC CImageParticleFilter.h)
+SET_TARGET_PROPERTIES(ImageParticleFilter PROPERTIES LINKER_LANGUAGE CXX)
+
+#ADD_LIBRARY(ImageParticleFilter SHARED CImageParticleFilter.cpp)
+
 ADD_LIBRARY(FacesDetection SHARED faces_detection.cpp)
 ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 ADD_LIBRARY(ImageRegistration SHARED ImageRegistration.cpp)
@@ -73,6 +77,7 @@ FIND_PACKAGE(OpenCL REQUIRED)
 TARGET_LINK_LIBRARIES(ImageRegistration
     ${DEPTH_REGISTRATION_LIBRARY}
 )
+
 
 TARGET_LINK_LIBRARIES(particle_filter_main
      ImageParticleFilter

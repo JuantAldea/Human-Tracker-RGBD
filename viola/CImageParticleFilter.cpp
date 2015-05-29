@@ -1,32 +1,40 @@
+#pragma once
 
+/*
 #include <limits>
 
 #include "CImageParticleFilter.h"
-#include "misc_helpers.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
+*/
 
-
-void CImageParticleFilter::print_particle_state(void) const
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
 {
     size_t N = m_particles.size();
     for (size_t i = 0; i < N; i++) {
-        std::cout << i << ' ' << m_particles[i].d->x
-            << ' ' << m_particles[i].d->y << ' ' << m_particles[i].d->z
-            << ' ' << m_particles[i].d->vx<< ' ' << m_particles[i].d->vy
-            << ' ' << m_particles[i].d->vz << std::endl;
+        std::cout << i << ' '            
+            << std::exp(m_particles[i].log_w) << ' '
+            << m_particles[i].d->x  << ' '
+            << m_particles[i].d->y  << ' '
+            << m_particles[i].d->z  << ' '
+            << m_particles[i].d->vx << ' '
+            << m_particles[i].d->vy << ' '
+            << m_particles[i].d->vz << ' '
+            << m_particles[i].d->object_x_length_pixels << ' '
+            << m_particles[i].d->object_y_length_pixels << ' '
+            << std::endl;
     }
 }
 
-void CImageParticleFilter::update_color_model(cv::Mat *model, const int roi_width,
-        const int roi_height)
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::update_color_model(const cv::Mat &model)
 {
-    color_model = model;
-    this->roi_width = roi_width;
-    this->roi_height = roi_height;
+    color_model = model.clone();
 }
 
-void CImageParticleFilter::update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation)
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation)
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
     const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
@@ -36,23 +44,32 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 
     const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
     const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
-
     auto update_particle = [&](int i) {
         //TODO can x, y go outside of the frame?
         const double old_z = m_particles[i].d->z;
-        const double new_z = depth_mat.at<uint16_t>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
+        const float old_x = m_particles[i].d->x;
+        const float old_y = m_particles[i].d->y;
         
-        //m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        //m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
-        //m_particles[i].d->z = new_z;
-        //m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        const double new_z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
+        
+        m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->z = new_z;
+        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
 
-        //m_particles[i].d->vx += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        //m_particles[i].d->vy += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        //m_particles[i].d->vz = (new_z - old_z) / dt;
-        //m_particles[i].d->vz += TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        this->roi_width = roi_width;
-        this->roi_height = roi_height;
+        m_particles[i].d->vx = m_particles[i].d->x - old_x + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vy = m_particles[i].d->y - old_y + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vz = (new_z - old_z) / dt;
+        m_particles[i].d->vz = m_particles[i].d->z - old_z + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        //this->roi_width = roi_width;
+        //this->roi_height = roi_height;
+        Eigen::Vector2i top_corner, bottom_corner;
+        std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(m_particles[i].d->x, m_particles[i].d->y), m_particles[i].d->z,
+            Eigen::Vector2f(this->object_x_length * 0.5, this->object_y_length * 0.5),
+            registration_data.cameraMatrixColor, registration_data.lookupX, registration_data.lookupY);
+        
+        m_particles[i].d->object_x_length_pixels = cvRound((bottom_corner - top_corner)[0]);
+        m_particles[i].d->object_y_length_pixels = cvRound((bottom_corner - top_corner)[1]);
     };
 
     size_t N = m_particles.size();
@@ -71,7 +88,8 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 #endif
 }
 
-void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
     
@@ -84,60 +102,52 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
 
     size_t N = m_particles.size();
 
-#ifdef USE_INTEL_TBB
-    tbb::concurrent_vector <cv::Mat> particles_color_model(N);
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
-        [this, &frame_hsv, &particles_color_model](const tbb::blocked_range<size_t> &r) {
-            for (size_t i = r.begin(); i != r.end(); i++) {
-                const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
-                                            m_particles[i].d->y - roi_height * 0.5, roi_width, roi_height);
-                if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
-                        || particle_roi.height <= 0) {
-                    continue;
-                }
-
-                if (particle_roi.x + particle_roi.width >= frame_hsv.cols
-                        || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-                    continue;
-                }
-
-                const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
-                const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
-                particles_color_model[i] = compute_color_model(particle_roi_img, mask);
-            }
-        }
-    );
-#else
     vector <cv::Mat> particles_color_model(N);
-    for (size_t i = 0; i < N; i++) {
-        const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
-                                    m_particles[i].d->y - roi_height * 0.5,
-                                    roi_width, roi_height);
 
+    auto compute_particles_color_model = [&](size_t i){
+        
+        const cv::Rect particle_roi(
+            m_particles[i].d->x - m_particles[i].d->object_x_length_pixels * 0.5,
+            m_particles[i].d->y - m_particles[i].d->object_y_length_pixels * 0.5,
+            m_particles[i].d->object_x_length_pixels, m_particles[i].d->object_y_length_pixels
+        );
+        
         if (particle_roi.x < 0 || particle_roi.y < 0 || particle_roi.width <= 0
                 || particle_roi.height <= 0) {
-            continue;
+            return;
         }
 
         if (particle_roi.x + particle_roi.width >= frame_hsv.cols
                 || particle_roi.y + particle_roi.height >= frame_hsv.rows) {
-            continue;
+            return;
         }
 
         const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
 
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+    };
+
+#ifdef USE_INTEL_TBB
+    //tbb::concurrent_vector <cv::Mat> particles_color_model(N);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
+        [this, &frame_hsv, &particles_color_model, &compute_particles_color_model](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                compute_particles_color_model(i);
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++) {
+        compute_particles_color_model(i);
     }
 #endif
 
     //third, weight them
     auto weight_particle = [this, &particles_color_model] (size_t i){
         if (!particles_color_model[i].empty()) {
-            const double score = 1 - cv::compareHist(*color_model, particles_color_model[i],
+            const double score = 1 - cv::compareHist(color_model, particles_color_model[i],
                                  CV_COMP_BHATTACHARYYA);
-            std::cout << "SCORE " << score << std::endl;
             m_particles[i].log_w += log(score);
         } else {
             m_particles[i].log_w += log(std::numeric_limits<double>::min());
@@ -161,7 +171,8 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
 
 }
 
-void CImageParticleFilter::prediction_and_update_pfStandardProposal(
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::prediction_and_update_pfStandardProposal(
     const mrpt::obs::CActionCollection*,
     const mrpt::obs::CSensoryFrame * const observation,
     const bayes::CParticleFilter::TParticleFilterOptions&)
@@ -174,16 +185,20 @@ void CImageParticleFilter::prediction_and_update_pfStandardProposal(
 
     update_particles_with_transition_model(dt, observation);
     weight_particles_with_model(observation);
-
+    print_particle_state();
     // Resample is automatically performed by CParticleFilter when required.
 }
 
-void CImageParticleFilter::initializeParticles(const size_t M, const pair<float, float> x,
-        const pair<float, float> y, const pair<float, float> z, const pair<float, float> v_x,
-        const pair<float, float> v_y, const pair<float, float> v_z)
+template<class DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const pair<float, float> &x,
+        const pair<float, float> &y, const pair<float, float> &z, const pair<float, float> &v_x,
+        const pair<float, float> &v_y, const pair<float, float> &v_z, const pair<float, float> &object_axes_length,
+        const ImageRegistration &registration_data)
 {
     clearParticles();
     m_particles.resize(M);
+    
+    this->registration_data = registration_data;
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         it->d = new CImageParticleData();
@@ -194,7 +209,7 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
         
         /*
         if (observation != nullptr){
-            it->d->z  = depth_mat.at<float>(cvRound(it->d->y), cvRound(it->d->x));
+            it->d->z  = depth_mat.at<DEPTH_TYPE>(cvRound(it->d->y), cvRound(it->d->x));
             it->d->vz = 0;
         } else{
             it->d->z  = randomGenerator.drawGaussian1D(z.first, z.second);
@@ -207,12 +222,21 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
         it->d->vz = randomGenerator.drawGaussian1D(v_z.first, v_z.second);
 
         it->log_w = 0;
-        //it->roi_width =
+        
+        std::tie(this->object_x_length, this->object_y_length) = object_axes_length;
+
+        Eigen::Vector2i top_corner, bottom_corner;
+        std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(it->d->x, it->d->y), it->d->z,
+            Eigen::Vector2f(this->object_x_length * 0.5, this->object_y_length * 0.5),
+            registration_data.cameraMatrixColor, registration_data.lookupX, registration_data.lookupY);
+        
+        it->d->object_x_length_pixels = cvRound((bottom_corner - top_corner)[0]);
+        it->d->object_y_length_pixels = cvRound((bottom_corner - top_corner)[1]);
     }
 }
 
-float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, float &vy,
-                                   float &vz)
+template<class DEPTH_TYPE>
+float CImageParticleFilter<DEPTH_TYPE>::get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const
 {
     auto m_particles_filtered = m_particles;
     /*
@@ -222,9 +246,8 @@ float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, fl
                 return a.log_w > b.log_w;
             }
     );
+    m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.20));
     */
-
-    //m_particles_filtered.resize(size_t(m_particles_filtered.size() * 0.20));
     
     double sumW = 0;
 #ifdef USE_INTEL_TBB
@@ -268,6 +291,7 @@ float CImageParticleFilter::get_mean(float &x, float &y, float &z, float &vx, fl
         vy += float(w * it->d->vy);
         vz += float(w * it->d->vz);
     }
+
     cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
     return sumW / m_particles.size();
 }

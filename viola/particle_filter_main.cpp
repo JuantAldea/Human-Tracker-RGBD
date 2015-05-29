@@ -273,18 +273,20 @@ int particle_filter()
 
     CParticleFilter PF;
     PF.m_options = PF_options;
-
-    CImageParticleFilter particles;
+    
+    using DEPTH_TYPE = uint16_t;
+    CImageParticleFilter<DEPTH_TYPE> particles;
 
     bool init_model = true;
-
+    float x_radius_global;
+    float y_radius_global;
     while (!mrpt::system::os::kbhit()) {
         listener->release(frames_kinect2);
         listener->waitForNewFrame(frames_kinect2);
 
         libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
         libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
-        libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
+        //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
 
 
         cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
@@ -364,7 +366,8 @@ int particle_filter()
                 
                 float x_radius = (bottom_corner - top_corner)[0] * 0.5;
                 float y_radius = (bottom_corner - top_corner)[1] * 0.5;
-                
+                x_radius_global = x_radius;
+                y_radius_global = y_radius;
                 //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
                 const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
 
@@ -372,14 +375,17 @@ int particle_filter()
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
 
-                particles.update_color_model(new cv::Mat(model), x_radius, y_radius);
+                particles.update_color_model(model);
 
 
                 particles.initializeParticles(NUM_PARTICLES, 
                     make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 1000.f),
                     //make_pair(center.x, radius), make_pair(center.y, radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 500),
                     //make_pair(0, 500), make_pair(0, 500), make_pair(0, 500),
-                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
+                    make_pair(0.06, 0.06),
+                    reg
+                );
 
                 init_model = false;
                 particles.last_time = cv::getTickCount();
@@ -391,9 +397,9 @@ int particle_filter()
                 //cv::Mat gradient = sobel_operator(color_frame(model_roi));
                 //model_window.showImage(CImage(new IplImage(gradient)));
                 CImage model_frame;
-                cv::Mat histogram_img = histogram_to_image(model, 10);
-                model_frame.loadFromIplImage(new IplImage(histogram_img));
-                //model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                //cv::Mat histogram_img = histogram_to_image(model, 10);
+                //model_frame.loadFromIplImage(new IplImage(histogram_img));
+                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
                 model_image_window.showImage(model_frame);
             }
         } else {
@@ -425,7 +431,7 @@ int particle_filter()
             std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
             //avrg_x, avrg_y, avrg_z
             
-            if (false && (mean_weight > 0.7)) {
+            if (mean_weight > 0.9) {
                 std::cout << "UPDATING MODEL" << std::endl;
                 Eigen::Vector2i top_corner, bottom_corner;
                 std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y), avrg_z, Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
@@ -440,10 +446,13 @@ int particle_filter()
                 cv::Mat frame_hsv;
                 cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
-                particles.update_color_model(new cv::Mat(model), x_radius, y_radius);
+                particles.update_color_model(model);
+                /*
                 particles.initializeParticles(NUM_PARTICLES, 
                     make_pair(avrg_x, x_radius), make_pair(avrg_y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(avrg_y), cvRound(avrg_x))), 1000.f),
-                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
+                    make_pair(0.06, 0.06), reg);
+                */
 
                 init_model = false;
                 particles.last_time = cv::getTickCount();
@@ -459,12 +468,13 @@ int particle_filter()
                 model_image_window.showImage(model_frame);
             }
         }
+
         cv::line(color_display_frame, cv::Point(color_display_frame.cols/2, 0), cv::Point(color_display_frame.cols/2, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows/2), cv::Point(color_display_frame.cols - 1, color_display_frame.rows/2), cv::Scalar(0, 255, 0));
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(frame_particles);
-
+        cout << "RADIUS " << x_radius_global << ' ' << y_radius_global << std::endl;
 #ifdef _3D
         //--- 3D view stuff
         create_cloud(color_frame, depth_frame, reg, scene_points_map);
