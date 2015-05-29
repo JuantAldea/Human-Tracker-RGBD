@@ -49,6 +49,8 @@ double TRANSITION_MODEL_STD_XY   = 0;
 double TRANSITION_MODEL_STD_VXY  = 0;
 double NUM_PARTICLES             = 0;
 
+using DEPTH_DATA_TYPE = uint16_t;
+
 libfreenect2::Freenect2Device *dev;
 libfreenect2::Freenect2 freenect2;
 libfreenect2::SyncMultiFrameListener *listener;
@@ -114,6 +116,18 @@ void combine(const cv::Mat &inC, const cv::Mat &inD, cv::Mat &out)
     }
 }
 
+
+void create_cloud(const std::vector<Eigen::Vector3f> &vectors, CColouredPointsMap &cloud)
+{
+    cloud.clear();
+    const size_t N = vectors.size();
+    //#pragma omp parallel for
+    for (size_t i = 0; i < N; i++){
+        const Eigen::Vector3f &vector = vectors[i];
+        cloud.insertPoint(-vector[2], vector[0], -vector[1], 0, 1, 0);
+    }
+}
+
 void create_cloud(const cv::Mat &color, const cv::Mat &depth, const ImageRegistration &reg, CColouredPointsMap &cloud)
 {
     //const float badPoint = std::numeric_limits<float>::quiet_NaN();
@@ -139,44 +153,6 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const ImageRegistr
             cloud.insertPoint(-z_coord, x_coord, -y_coord , itC->val[2] / 255.0, itC->val[1] / 255.0, itC->val[0] / 255.0);
         }
     }
-}
-
-inline Eigen::Vector3f point_3D_reprojection (const Eigen::Vector2f &point, const float depth, const ImageRegistration &reg)
-{
-    static const float badPoint = std::numeric_limits<float>::quiet_NaN();
-    const float x = reg.lookupX.at<float>(0, point[0]);
-    const float y = reg.lookupY.at<float>(0, point[1]);
-    register const float depthValue = depth / 1000.0f;
-
-    // Check for invalid measurements
-    if (isnan(depthValue) || depthValue <= 0.001) {
-        return Eigen::Vector3f(badPoint, badPoint, badPoint);
-    }
-    
-    const float z_coord = depthValue;
-    const float x_coord = x * depthValue;
-    const float y_coord = y * depthValue;
-
-    return Eigen::Vector3f(x_coord, y_coord, z_coord);
-}
-
-inline Eigen::Vector3f point_3D_reprojection(const Eigen::Vector2f &point, const cv::Mat &depth, const ImageRegistration &reg)
-{
-    return point_3D_reprojection(point, depth.at<uint16_t>(point[1], point[0]), reg);
-}
-
-std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth, const ImageRegistration &reg, CColouredPointsMap &cloud)
-{
-    cloud.clear();
-    std::vector<Eigen::Vector3f> reprojected_points;
-    //#pragma omp parallel for
-    for (auto vector : points){
-        auto point_3d = point_3D_reprojection(vector, depth, reg);
-        cloud.insertPoint(-point_3d[2], point_3d[0], -point_3d[1], 0, 1, 0);
-        reprojected_points.push_back(point_3d);
-    }
-    
-    return reprojected_points;
 }
 
 int particle_filter()
@@ -265,21 +241,25 @@ int particle_filter()
 
     mrpt::opengl::CPointCloudColouredPtr scene_points = mrpt::opengl::CPointCloudColoured::Create();
     mrpt::opengl::CPointCloudColouredPtr particle_points = mrpt::opengl::CPointCloudColoured::Create();
+    mrpt::opengl::CPointCloudColouredPtr model_center_point = mrpt::opengl::CPointCloudColoured::Create();
     scene_points->setPointSize(0.5);
     particle_points->setPointSize(2);
+    model_center_point->setPointSize(10);
 
     {
         mrpt::opengl::COpenGLScenePtr &scene = win3D.get3DSceneAndLock();
         scene->insert(scene_points);
         scene->insert(particle_points);
-        //scene->insert(mrpt::opengl::CGridPlaneXY::Create());
-        //scene->insert(mrpt::opengl::stock_objects::CornerXYZ());
+        scene->insert(model_center_point);
+        scene->insert(mrpt::opengl::CGridPlaneXY::Create());
+        //scene->insert(mrpt::opengl::stock_objects::CornerXYZSimple());
         win3D.unlockAccess3DScene();
         win3D.repaint();
     }
 
     CColouredPointsMap scene_points_map;
     CColouredPointsMap particle_points_map;
+    CColouredPointsMap model_center_map;
     scene_points_map.colorScheme.scheme = CColouredPointsMap::cmFromIntensityImage;
 #endif
 
@@ -369,24 +349,102 @@ int particle_filter()
                 for (size_t i = 0; i < circles.size(); i++) {
                     cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
                     int radius = cvRound(circles[i][2]);
-                    cv::circle(color_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                    cv::circle(color_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+                    cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                    cv::circle(color_display_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
                     if (radius_max < radius) {
                         radius_max = radius;
                         circle_max = i;
                     }
                 }
-                cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
 
-                int radius = cvRound(circles[circle_max][2]);
-                cout << "circle " << center.x << ' ' << center.y << ' ' << radius << endl;
-                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
+                cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
+                //int radius_2d = cvRound(circles[circle_max][2]);
+                Eigen::Vector2i top_corner, bottom_corner;
+                std::tie(top_corner, bottom_corner) = project_model<DEPTH_DATA_TYPE>(Eigen::Vector2f(center.x, center.y), depth_frame, Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                
+                float x_radius = (bottom_corner - top_corner)[0] * 0.5;
+                float y_radius = (bottom_corner - top_corner)[1] * 0.5;
+                
+                //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
+                const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
+
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
+                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
-                particles.update_color_model(new cv::Mat(model), radius, radius);
-                particles.initializeParticles(NUM_PARTICLES, make_pair(center.x, radius), make_pair(center.y,
-                                              radius), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), make_pair(0, 0), &observation);
+
+                particles.update_color_model(new cv::Mat(model), x_radius, y_radius);
+
+
+                particles.initializeParticles(NUM_PARTICLES, 
+                    make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 1000.f),
+                    //make_pair(center.x, radius), make_pair(center.y, radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 500),
+                    //make_pair(0, 500), make_pair(0, 500), make_pair(0, 500),
+                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+
+                init_model = false;
+                particles.last_time = cv::getTickCount();
+
+                model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
+                const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
+                bitwise_and(color_frame(model_roi), ones, model_frame, mask);
+
+                //cv::Mat gradient = sobel_operator(color_frame(model_roi));
+                //model_window.showImage(CImage(new IplImage(gradient)));
+                CImage model_frame;
+                cv::Mat histogram_img = histogram_to_image(model, 10);
+                model_frame.loadFromIplImage(new IplImage(histogram_img));
+                //model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                model_image_window.showImage(model_frame);
+            }
+        } else {
+            // Process in the PF
+            static CParticleFilter::TParticleFilterStats stats;
+            PF.executeOn(particles, NULL, &observation, &stats);
+
+            // Show PF state:
+            cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
+            cout << "Particle filter ESS: " << particles.ESS() << endl;
+
+            size_t N = particles.m_particles.size();
+            for (size_t i = 0; i < N; i++) {
+                cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
+                                                  particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+            }
+
+            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
+            
+            //Eigen::Vector2f stimated_3d_center_pose = points_3D_reprojection(Eigen::Vector2f(avrg_x, avrg_y), avrg_z);
+            //Eigen::Vector2f stimated_3d_center_pose = points_3D_reprojection(Eigen::Vector2f(avrg_x, avrg_y), avrg_z);
+
+            float mean_weight = particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
+            cv::circle(color_display_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
+                     cv::Scalar(0, 255, 0), 5, 1, 0);
+
+            //particles.print_particle_state();
+            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
+            //avrg_x, avrg_y, avrg_z
+            
+            if (false && (mean_weight > 0.7)) {
+                std::cout << "UPDATING MODEL" << std::endl;
+                Eigen::Vector2i top_corner, bottom_corner;
+                std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y), avrg_z, Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                
+                float x_radius = (bottom_corner - top_corner)[0] * 0.5;
+                float y_radius = (bottom_corner - top_corner)[1] * 0.5;
+                
+                //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
+                const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
+
+                const cv::Mat mask = create_ellipse_mask(model_roi, 1);
+                cv::Mat frame_hsv;
+                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
+                const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
+                particles.update_color_model(new cv::Mat(model), x_radius, y_radius);
+                particles.initializeParticles(NUM_PARTICLES, 
+                    make_pair(avrg_x, x_radius), make_pair(avrg_y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(avrg_y), cvRound(avrg_x))), 1000.f),
+                    make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+
                 init_model = false;
                 particles.last_time = cv::getTickCount();
 
@@ -400,31 +458,9 @@ int particle_filter()
                 model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
                 model_image_window.showImage(model_frame);
             }
-        } else {
-            // Process in the PF
-            static CParticleFilter::TParticleFilterStats stats;
-            PF.executeOn(particles, NULL, &observation, &stats);
-
-            // Show PF state:
-            cout << "ESS_beforeResample " << stats.ESS_beforeResample << "weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
-            cout << "Particle filter ESS: " << particles.ESS() << endl;
-
-            size_t N = particles.m_particles.size();
-            for (size_t i = 0; i < N; i++) {
-                cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
-                                                  particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
-            }
-
-            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-            particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
-            cv::circle(color_display_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
-                     cv::Scalar(0, 255, 0), 5, 1, 0);
-
-            //particles.print_particle_state();
-            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
         }
-
+        cv::line(color_display_frame, cv::Point(color_display_frame.cols/2, 0), cv::Point(color_display_frame.cols/2, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
+        cv::line(color_display_frame, cv::Point(0, color_display_frame.rows/2), cv::Point(color_display_frame.cols - 1, color_display_frame.rows/2), cv::Scalar(0, 255, 0));
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(frame_particles);
@@ -434,16 +470,26 @@ int particle_filter()
         create_cloud(color_frame, depth_frame, reg, scene_points_map);
         
         size_t N = particles.m_particles.size();
-        std::vector<Eigen::Vector2f> particle_vectors;
+        std::vector<Eigen::Vector2f> particle_vectors(N);
+        std::vector<Eigen::Vector3f> particle_vectors3d(N);
+        std::vector<Eigen::Vector3f> particle_vectors3d_2(N);
+        
         for (size_t i = 0; i < N; i++) {
-            particle_vectors.push_back(Eigen::Vector2f(particles.m_particles[i].d->x, particles.m_particles[i].d->y));
+            particle_vectors[i] = Eigen::Vector2f(particles.m_particles[i].d->x, particles.m_particles[i].d->y);
+            particle_vectors3d_2[i] = Eigen::Vector3f(particles.m_particles[i].d->x, particles.m_particles[i].d->y, particles.m_particles[i].d->z);
+            particle_vectors3d[i] = point_3D_reprojection(particle_vectors[i], particles.m_particles[i].d->z, reg.lookupX, reg.lookupY);
         }
-        points_3D_reprojection(particle_vectors, depth_frame, reg, particle_points_map);
 
+        std::vector<Eigen::Vector3f> points_3d = points_3D_reprojection<DEPTH_DATA_TYPE>(particle_vectors, depth_frame, reg.lookupX, reg.lookupY);
+
+        create_cloud(points_3d, particle_points_map);
+        //create_cloud(particle_vectors3d, particle_points_map);
+        //create_cloud(particle_vectors3d_2, particle_points_map);
 
         win3D.get3DSceneAndLock();
         scene_points->loadFromPointsMap(&scene_points_map);
         particle_points->loadFromPointsMap(&particle_points_map);
+        model_center_point->loadFromPointsMap(&model_center_map);
         win3D.unlockAccess3DScene();
         win3D.repaint();
 #endif

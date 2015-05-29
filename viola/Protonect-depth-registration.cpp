@@ -207,10 +207,7 @@ int main(int argc, char *argv[])
 
         cv::Mat registered_color_depth;
         reg.register_images(color_mat, depth_mat, registered_color_depth);
-        double min, max;
-        cv::minMaxLoc(registered_color_depth, &min, &max);
-        std::cout << "min " << min << " max " << max << std::endl;
-        
+
         cv::Mat depthDisp;
         dispDepth(registered_color_depth, depthDisp, 12000.0f);
         

@@ -128,19 +128,19 @@ void ImageRegistration::createLookup()
 {
     const size_t width = sizeColor.width;
     const size_t height = sizeColor.height;
-    const float fx = 1.0f / cameraMatrixColor.at<double>(0, 0);
-    const float fy = 1.0f / cameraMatrixColor.at<double>(1, 1);
+    const float inv_fx = 1.0f / cameraMatrixColor.at<double>(0, 0);
+    const float inv_fy = 1.0f / cameraMatrixColor.at<double>(1, 1);
     const float cx = cameraMatrixColor.at<double>(0, 2);
     const float cy = cameraMatrixColor.at<double>(1, 2);
 
     float *it = lookupY.ptr<float>();
     for (size_t r = 0; r < height; ++r, ++it) {
-        *it = (r - cy) * fy;
+        *it = (r - cy) * inv_fy;
     }
 
     it = lookupX.ptr<float>();
     for (size_t c = 0; c < width; ++c, ++it) {
-        *it = (c - cx) * fx;
+        *it = (c - cx) * inv_fx;
     }
 }
 /*

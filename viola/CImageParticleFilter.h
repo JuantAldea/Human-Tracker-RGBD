@@ -34,6 +34,8 @@ struct CImageParticleData {
     float vx;
     float vy;
     float vz;
+    int roi_width;
+    int roi_height;
 };
 
 class CImageParticleFilter :
@@ -56,13 +58,12 @@ public:
                              const pair<float, float> z,
                              const pair<float, float> v_x,
                              const pair<float, float> v_y,
-                             const pair<float, float> v_z,
-                             const mrpt::obs::CSensoryFrame * const observation);
+                             const pair<float, float> v_z);
 
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
     
-    void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
+    float get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz);
     void print_particle_state(void) const;
 
     int64_t last_time;

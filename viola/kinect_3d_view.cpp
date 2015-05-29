@@ -79,7 +79,8 @@ void kinect_3d_view()
         //cout << "REPRO " << reprojection.rows << ' ' << reprojection.cols << endl;
         //cout << "COLOR " << color.rows << ' ' << color.cols << endl;
         
-        reprojection = depth_3D_reprojection(depth, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
+        reprojection = depth_3D_reprojection<float>(depth, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
+        //reprojection = depth_3D_reprojection<uint16_t>(depth, 1.f/params.fx, 1.f/params.fy, params.cx, params.cy);
         pntsMap.clear();
         for (int x = 0; x < reprojection.rows; x++) {
             for (int y = 0; y < reprojection.cols; y++) {
