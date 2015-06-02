@@ -13,6 +13,9 @@ IGNORE_WARNINGS_PUSH
 #include <mrpt/obs/CObservationImage.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
+#include <mrpt/gui/CDisplayWindow.h>
+using namespace mrpt::gui;
+
 IGNORE_WARNINGS_POP
 
 #include "geometry_helpers.h"
@@ -44,7 +47,7 @@ struct CImageParticleData
     int object_y_length_pixels;
 };
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 class CImageParticleFilter :
     public mrpt::bayes::CParticleFilterData<CImageParticleData>,
     public mrpt::bayes::CParticleFilterDataImpl <CImageParticleFilter<DEPTH_TYPE>,
@@ -77,9 +80,11 @@ public:
     void print_particle_state(void) const;
 
     int64_t last_time;
+    CDisplayWindow particle_window;
+    CImage particle_image;
+    cv::Mat color_model;
 
 private:
-    cv::Mat color_model;
     ImageRegistration registration_data;
     float object_x_length;
     float object_y_length;

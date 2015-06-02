@@ -34,7 +34,7 @@ IGNORE_WARNINGS_POP
 #include "geometry_helpers.h"
 #include "color_model.h"
 #include "faces_detection.h"
-
+#include "model_parameters.h"
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
@@ -44,12 +44,6 @@ using namespace mrpt::opengl;
 using namespace mrpt::maps;
 
 using namespace std;
-
-double TRANSITION_MODEL_STD_XY   = 0;
-double TRANSITION_MODEL_STD_VXY  = 0;
-double NUM_PARTICLES             = 0;
-
-using DEPTH_DATA_TYPE = uint16_t;
 
 libfreenect2::Freenect2Device *dev;
 libfreenect2::Freenect2 freenect2;
@@ -116,19 +110,68 @@ void combine(const cv::Mat &inC, const cv::Mat &inD, cv::Mat &out)
     }
 }
 
+/*
+inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const float x, const float y, const float z, const double inv_fx, const double inv_fy, const float cx, const float cy)
+{
+    return Eigen::Vector3f((x - cx) * z * inv_fx, (y - cy) * z * inv_fy, z);
+}
 
-void create_cloud(const std::vector<Eigen::Vector3f> &vectors, CColouredPointsMap &cloud)
+inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const float x, const float y, const float z, const cv::Mat &cameraMatrix)
+{
+    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
+    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
+    const float cx = cameraMatrix.at<double>(0, 2);
+    const float cy = cameraMatrix.at<double>(1, 2);
+    return pixel_depth_to_3D_coordiantes(x, y, z, inv_fx, inv_fy, cx, cy);
+}
+
+inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const Eigen::Vector3f &v, const cv::Mat &cameraMatrix)
+{
+    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
+    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
+    const float cx = cameraMatrix.at<double>(0, 2);
+    const float cy = cameraMatrix.at<double>(1, 2);
+    return pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
+}
+
+vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(vector<Eigen::Vector3f> xyd_vectors, const double inv_fx, const double inv_fy, const double cx, const double cy)
+{
+    const size_t N = xyd_vectors.size();
+    vector<Eigen::Vector3f> coordinates_3D(N);
+    //TODO TBB
+    for (size_t i = 0; i < N; i++){
+        const Eigen::Vector3f &v = xyd_vectors[i];
+        coordinates_3D[i] = pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
+    }
+
+    return coordinates_3D;
+}
+
+inline vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(vector<Eigen::Vector3f> xyd_vectors, const cv::Mat &cameraMatrix)
+{
+    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
+    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
+    const float cx = cameraMatrix.at<double>(0, 2);
+    const float cy = cameraMatrix.at<double>(1, 2);
+    return pixel_depth_to_3D_coordiantes(xyd_vectors, inv_fx, inv_fy, cx, cy);
+}
+*/
+
+void create_cloud(const std::vector<Eigen::Vector3f> &points, const float scale, CColouredPointsMap &cloud)
 {
     cloud.clear();
-    const size_t N = vectors.size();
+    const size_t N = points.size();
     //#pragma omp parallel for
     for (size_t i = 0; i < N; i++){
-        const Eigen::Vector3f &vector = vectors[i];
-        cloud.insertPoint(-vector[2], vector[0], -vector[1], 0, 1, 0);
+        const Eigen::Vector3f &v = points[i];
+        if (isnan(v[2]) || std::abs(v[2] * scale) <= 0.001) {
+            continue;
+        }
+        cloud.insertPoint(-v[2] * scale, v[0] * scale, -v[1] * scale, 0, 1, 0);
     }
 }
 
-void create_cloud(const cv::Mat &color, const cv::Mat &depth, const ImageRegistration &reg, CColouredPointsMap &cloud)
+void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale, const ImageRegistration &reg, CColouredPointsMap &cloud)
 {
     //const float badPoint = std::numeric_limits<float>::quiet_NaN();
     cloud.clear();
@@ -140,24 +183,24 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const ImageRegistr
         const float *itX = reg.lookupX.ptr<float>();
 
         for (size_t c = 0; c < (size_t)depth.cols; ++c, ++itD, ++itC, ++itX) {
-            register const float depthValue = *itD / 1000.0f;
+            register const float depthValue = *itD;
             // Check for invalid measurements
-            if (isnan(depthValue) || depthValue <= 0.001) {
+            if (isnan(depthValue) || std::abs(depthValue) <= 0.001) {
                 continue;
             }
 
-            const float z_coord = depthValue;
-            const float x_coord = (*itX) * depthValue;
-            const float y_coord = y * depthValue;
-            
+            const float z_coord = depthValue * scale;
+            const float x_coord = (*itX) * depthValue* scale;
+            const float y_coord = y * depthValue* scale;
+            //cout << "CLOUD " << x_coord << ' ' << y_coord << ' ' << z_coord << endl;
             cloud.insertPoint(-z_coord, x_coord, -y_coord , itC->val[2] / 255.0, itC->val[1] / 255.0, itC->val[0] / 255.0);
         }
     }
 }
 
+
 int particle_filter()
 {
-
     if (freenect2.enumerateDevices() == 0) {
         std::cout << "no device connected!" << std::endl;
         return -1;
@@ -223,34 +266,35 @@ int particle_filter()
     randomGenerator.randomize();
     CDisplayWindow image("image");
 
-    CDisplayWindow model_window("model");
     CDisplayWindow model_image_window("model-image");
-    CDisplayWindow depth_window("depth_window");
-    CDisplayWindow registered_color("registered_depth");
+    CDisplayWindow model_candidate_window("model_candidate_window");
+    CDisplayWindow model_histogram_window("model_histogram_window");
+    CDisplayWindow model_candidate_histogram_window("model_candidate_histogram_window");
+    CDisplayWindow registered_color("registered_depth_color");
 
     // -------------------3D view stuff------------------
 #define _3D
 #ifdef _3D
-    CDisplayWindow3D win3D("Kinect 3D view", 800, 600);
+    CDisplayWindow3D win3D("Kinect 3D view", 640, 480);
 
     win3D.setCameraAzimuthDeg(0);
     win3D.setCameraElevationDeg(0);
     win3D.setCameraZoom(1);
-    win3D.setFOV(90);
+    win3D.setFOV(65);
     win3D.setCameraPointingToPoint(0, 0, 0);
 
     mrpt::opengl::CPointCloudColouredPtr scene_points = mrpt::opengl::CPointCloudColoured::Create();
     mrpt::opengl::CPointCloudColouredPtr particle_points = mrpt::opengl::CPointCloudColoured::Create();
-    mrpt::opengl::CPointCloudColouredPtr model_center_point = mrpt::opengl::CPointCloudColoured::Create();
+    mrpt::opengl::CPointCloudColouredPtr model_center_points = mrpt::opengl::CPointCloudColoured::Create();
     scene_points->setPointSize(0.5);
     particle_points->setPointSize(2);
-    model_center_point->setPointSize(10);
+    model_center_points->setPointSize(2);
 
     {
         mrpt::opengl::COpenGLScenePtr &scene = win3D.get3DSceneAndLock();
         scene->insert(scene_points);
         scene->insert(particle_points);
-        scene->insert(model_center_point);
+        scene->insert(model_center_points);
         scene->insert(mrpt::opengl::CGridPlaneXY::Create());
         //scene->insert(mrpt::opengl::stock_objects::CornerXYZSimple());
         win3D.unlockAccess3DScene();
@@ -259,7 +303,7 @@ int particle_filter()
 
     CColouredPointsMap scene_points_map;
     CColouredPointsMap particle_points_map;
-    CColouredPointsMap model_center_map;
+    CColouredPointsMap model_center_points_map;
     scene_points_map.colorScheme.scheme = CColouredPointsMap::cmFromIntensityImage;
 #endif
 
@@ -280,6 +324,8 @@ int particle_filter()
     bool init_model = true;
     float x_radius_global;
     float y_radius_global;
+    float x_global;
+    float y_global;
     while (!mrpt::system::os::kbhit()) {
         listener->release(frames_kinect2);
         listener->waitForNewFrame(frames_kinect2);
@@ -301,11 +347,13 @@ int particle_filter()
         dispDepth(registered_depth, depthDisp, 12000.0f);
         cv::Mat combined;
         combine(color_mat, depthDisp, combined);
-
+        cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
+        cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
+        
         CImage registered_depth_image;
         registered_depth_image.loadFromIplImage(new IplImage(combined));
         registered_color.showImage(registered_depth_image);
-
+        
         color_frame = color_mat;
         depth_frame = registered_depth;
         color_display_frame = color_mat.clone();
@@ -335,7 +383,6 @@ int particle_filter()
         gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
         CImage model_image;
         model_image.loadFromIplImage(new IplImage(gradient));
-        model_window.showImage(model_image);
 
         CImage depth_image;
         depth_image.loadFromIplImage(new IplImage(gradient_depth_8UC1));
@@ -361,145 +408,177 @@ int particle_filter()
 
                 cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
                 //int radius_2d = cvRound(circles[circle_max][2]);
+                
                 Eigen::Vector2i top_corner, bottom_corner;
-                std::tie(top_corner, bottom_corner) = project_model<DEPTH_DATA_TYPE>(Eigen::Vector2f(center.x, center.y), depth_frame, Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                
+                std::tie(top_corner, bottom_corner) = project_model(
+                    Eigen::Vector2f(center.x, center.y), 
+                    depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)), 
+                    Eigen::Vector2f(0.06, 0.06),
+                    reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
                 
                 float x_radius = (bottom_corner - top_corner)[0] * 0.5;
                 float y_radius = (bottom_corner - top_corner)[1] * 0.5;
                 x_radius_global = x_radius;
                 y_radius_global = y_radius;
+                x_global = center.x;
+                y_global = center.y;
+
                 //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
-                const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
+                const cv::Rect model_roi(top_corner[0] + (bottom_corner[0] - top_corner[0]) * 0.1,
+                    top_corner[1] + (bottom_corner[1] - top_corner[1]) * 0.1,
+                    (bottom_corner[0] - top_corner[0]) * 0.8, (bottom_corner[1] - top_corner[1]) * 0.8);
 
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
-                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
-
+                cv::Mat color_roi = color_frame(model_roi);
+                cv::Mat hsv_roi;
+                
+                cv::cvtColor(color_roi, hsv_roi, cv::COLOR_BGR2HSV);
+                const cv::Mat model = compute_color_model(hsv_roi, mask);
                 particles.update_color_model(model);
 
-
+                std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
                 particles.initializeParticles(NUM_PARTICLES, 
-                    make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 1000.f),
-                    //make_pair(center.x, radius), make_pair(center.y, radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(center.y), cvRound(center.x))), 500),
+                    make_pair(center.x, x_radius * 0.8), make_pair(center.y, y_radius * 0.8), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
+                    //make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(0, 250.f),
+                    //make_pair(center.x, 0), make_pair(center.y, 0), make_pair(0, 25),
                     //make_pair(0, 500), make_pair(0, 500), make_pair(0, 500),
                     make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                    make_pair(0.06, 0.06),
+                    make_pair(0.12 * 0.8, 0.12 * 0.8),
                     reg
                 );
 
                 init_model = false;
-                particles.last_time = cv::getTickCount();
 
                 model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
                 const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
                 bitwise_and(color_frame(model_roi), ones, model_frame, mask);
 
-                //cv::Mat gradient = sobel_operator(color_frame(model_roi));
-                //model_window.showImage(CImage(new IplImage(gradient)));
                 CImage model_frame;
-                //cv::Mat histogram_img = histogram_to_image(model, 10);
-                //model_frame.loadFromIplImage(new IplImage(histogram_img));
                 model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
                 model_image_window.showImage(model_frame);
+                CImage model_histogram_image;
+                model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
+                model_histogram_window.showImage(model_histogram_image);
+                //mrpt::system::os::getch();
             }
         } else {
-            // Process in the PF
             static CParticleFilter::TParticleFilterStats stats;
             PF.executeOn(particles, NULL, &observation, &stats);
-
-            // Show PF state:
             cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
             cout << "Particle filter ESS: " << particles.ESS() << endl;
 
-            size_t N = particles.m_particles.size();
-            for (size_t i = 0; i < N; i++) {
-                cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
-                                                  particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
-            }
-
             float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-            
-            //Eigen::Vector2f stimated_3d_center_pose = points_3D_reprojection(Eigen::Vector2f(avrg_x, avrg_y), avrg_z);
-            //Eigen::Vector2f stimated_3d_center_pose = points_3D_reprojection(Eigen::Vector2f(avrg_x, avrg_y), avrg_z);
-
             float mean_weight = particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
-            cv::circle(color_display_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
-                     cv::Scalar(0, 255, 0), 5, 1, 0);
 
-            //particles.print_particle_state();
-            std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
-            //avrg_x, avrg_y, avrg_z
+            cv::circle(color_display_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
+
+            std::cout << "MEAN " << mean_weight << " " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
             
-            if (mean_weight > 0.9) {
-                std::cout << "UPDATING MODEL" << std::endl;
+            {
                 Eigen::Vector2i top_corner, bottom_corner;
-                std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y), avrg_z, Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-                
-                float x_radius = (bottom_corner - top_corner)[0] * 0.5;
-                float y_radius = (bottom_corner - top_corner)[1] * 0.5;
-                
-                //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
+                std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y),
+                    //depth_frame.at<DEPTH_TYPE>(cvRound(color_display_frame.rows/2), cvRound(color_display_frame.cols/2)),
+                    depth_frame.at<DEPTH_TYPE>(cvRound(avrg_y), cvRound(avrg_x)),
+                    Eigen::Vector2f(0.06*0.8, 0.06*0.8), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+                std::cout << top_corner << std::endl << bottom_corner << std::endl;
                 const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
 
-                const cv::Mat mask = create_ellipse_mask(model_roi, 1);
-                cv::Mat frame_hsv;
-                cv::cvtColor(color_frame, frame_hsv, cv::COLOR_BGR2HSV);
-                const cv::Mat model = compute_color_model(frame_hsv(model_roi), mask);
-                particles.update_color_model(model);
+ 
+                
+                // test whether the estimated roi lies inside of the image frame or not
+                const cv::Rect rectangle_image = cv::Rect(cv::Point(0, 0), color_frame.size());
+                const cv::Rect rectangle_image_roi_intersection = rectangle_image & model_roi;
+                if (model_roi.area() == rectangle_image_roi_intersection.area()){
+                    const cv::Mat mask = create_ellipse_mask(model_roi, 1);
+                    cv::Mat color_roi = color_frame(model_roi);
+                    cv::Mat hsv_roi;
+                    cv::cvtColor(color_roi, hsv_roi, cv::COLOR_BGR2HSV);
+
+                    const cv::Mat model = compute_color_model(hsv_roi, mask);
+                    const double distance_hist = cv::compareHist(model, particles.color_model, CV_COMP_BHATTACHARYYA);
+                    const double score = 1 - distance_hist;
+                    //const double score = (1.0f / (SQRT_2PI * SIGMA_COLOR)) * exp(-0.5f * distance_hist * distance_hist / (SIGMA_COLOR * SIGMA_COLOR));
+                    std::cout << "MEAN LIKEHOOD " << score << std::endl;
+
+                    CImage model_candidate;
+                    model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                    model_candidate_window.showImage(model_candidate);
+                   
+                    CImage model_candidate_histogram_image;
+                    model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(model, 10)));
+                    model_candidate_histogram_window.showImage(model_candidate_histogram_image);
+                    
+                    if (score > LIKEHOOD_FOUND){
+                        const int radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
+                        const int radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
+                        const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
+                        cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                        cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
+                    }
+
+                    if (score > LIKEHOOD_UPDATE){
+                        std::cout << "MEAN UPDATING MODEL" << std::endl;
+                        CImage model_frame;
+                        model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                        model_image_window.showImage(model_frame);
+                        particles.update_color_model(model);
+                    }
+                }
+                
+                
                 /*
                 particles.initializeParticles(NUM_PARTICLES, 
                     make_pair(avrg_x, x_radius), make_pair(avrg_y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(avrg_y), cvRound(avrg_x))), 1000.f),
                     make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                    make_pair(0.06, 0.06), reg);
+                    make_pair(0.12, 0.12), reg);
                 */
-
-                init_model = false;
-                particles.last_time = cv::getTickCount();
-
-                model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
-                const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
-                bitwise_and(color_frame(model_roi), ones, model_frame, mask);
-
-                //cv::Mat gradient = sobel_operator(color_frame(model_roi));
-                //model_window.showImage(CImage(new IplImage(gradient)));
-                CImage model_frame;
-                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-                model_image_window.showImage(model_frame);
             }
         }
+        particles.last_time = cv::getTickCount();
 
-        cv::line(color_display_frame, cv::Point(color_display_frame.cols/2, 0), cv::Point(color_display_frame.cols/2, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
-        cv::line(color_display_frame, cv::Point(0, color_display_frame.rows/2), cv::Point(color_display_frame.cols - 1, color_display_frame.rows/2), cv::Scalar(0, 255, 0));
+        size_t N = particles.m_particles.size();
+
+        for (size_t i = 0; i < N; i++) {
+            cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
+                                              particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+        }
+        
+        cv::line(color_display_frame, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
+        cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
+                
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(frame_particles);
-        cout << "RADIUS " << x_radius_global << ' ' << y_radius_global << std::endl;
+
 #ifdef _3D
+
         //--- 3D view stuff
-        create_cloud(color_frame, depth_frame, reg, scene_points_map);
+        create_cloud(color_frame, depth_frame, 1.0/1000.0f, reg, scene_points_map);
         
-        size_t N = particles.m_particles.size();
-        std::vector<Eigen::Vector2f> particle_vectors(N);
+        //std::vector<Eigen::Vector2f> particle_vectors(N);
         std::vector<Eigen::Vector3f> particle_vectors3d(N);
         std::vector<Eigen::Vector3f> particle_vectors3d_2(N);
         
         for (size_t i = 0; i < N; i++) {
-            particle_vectors[i] = Eigen::Vector2f(particles.m_particles[i].d->x, particles.m_particles[i].d->y);
+            //particle_vectors[i] = Eigen::Vector2f(particles.m_particles[i].d->x, particles.m_particles[i].d->y);
             particle_vectors3d_2[i] = Eigen::Vector3f(particles.m_particles[i].d->x, particles.m_particles[i].d->y, particles.m_particles[i].d->z);
-            particle_vectors3d[i] = point_3D_reprojection(particle_vectors[i], particles.m_particles[i].d->z, reg.lookupX, reg.lookupY);
+            //particle_vectors3d[i] = point_3D_reprojection(particle_vectors[i], particles.m_particles[i].d->z, reg.lookupX, reg.lookupY);
         }
 
-        std::vector<Eigen::Vector3f> points_3d = points_3D_reprojection<DEPTH_DATA_TYPE>(particle_vectors, depth_frame, reg.lookupX, reg.lookupY);
-
-        create_cloud(points_3d, particle_points_map);
+        //std::vector<Eigen::Vector3f> points_3d = points_3D_reprojection<DEPTH_DATA_TYPE>(particle_vectors, depth_frame, reg.lookupX, reg.lookupY);
+        std::vector<Eigen::Vector3f> particle_points_3d = pixel_depth_to_3D_coordiantes(particle_vectors3d_2, reg.cameraMatrixColor);
+        //create_cloud(points_3d, particle_points_map);
         //create_cloud(particle_vectors3d, particle_points_map);
-        //create_cloud(particle_vectors3d_2, particle_points_map);
+        //points_3d[0] = pixel_depth_to_3D_coordiantes(Eigen::Vector3f(x_global, y_global, depth_frame.at<DEPTH_TYPE>(y_global, x_global)), reg.cameraMatrixColor);
+        create_cloud(particle_points_3d, 1.0/1000.0f, particle_points_map);
 
         win3D.get3DSceneAndLock();
         scene_points->loadFromPointsMap(&scene_points_map);
         particle_points->loadFromPointsMap(&particle_points_map);
-        model_center_point->loadFromPointsMap(&model_center_map);
+        //model_center_points->loadFromPointsMap(&model_center_points_map);
         win3D.unlockAccess3DScene();
         win3D.repaint();
 #endif

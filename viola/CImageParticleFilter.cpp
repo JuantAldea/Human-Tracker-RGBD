@@ -1,4 +1,6 @@
 #pragma once
+#include <cmath>
+#include "model_parameters.h"
 
 /*
 #include <limits>
@@ -8,7 +10,7 @@
 #include "color_model.h"
 */
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
 {
     size_t N = m_particles.size();
@@ -27,13 +29,13 @@ void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
     }
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::update_color_model(const cv::Mat &model)
 {
     color_model = model.clone();
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation)
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
@@ -44,25 +46,30 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
 
     const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
     const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
-    auto update_particle = [&](int i) {
+    auto update_particle = [&](const size_t i) {
         //TODO can x, y go outside of the frame?
+        /*
         const double old_z = m_particles[i].d->z;
         const float old_x = m_particles[i].d->x;
         const float old_y = m_particles[i].d->y;
-        
+        */
         const double new_z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
         
         m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->z = new_z;
-        m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        //m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        
+        /*
+        m_particles[i].d->vx = (m_particles[i].d->x - old_x) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vy = (m_particles[i].d->y - old_y) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vz = (m_particles[i].d->z - old_z) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        */
 
-        m_particles[i].d->vx = m_particles[i].d->x - old_x + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->vy = m_particles[i].d->y - old_y + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->vz = (new_z - old_z) / dt;
-        m_particles[i].d->vz = m_particles[i].d->z - old_z + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        //this->roi_width = roi_width;
-        //this->roi_height = roi_height;
+        m_particles[i].d->vx = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vy = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        m_particles[i].d->vz = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        
         Eigen::Vector2i top_corner, bottom_corner;
         std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(m_particles[i].d->x, m_particles[i].d->y), m_particles[i].d->z,
             Eigen::Vector2f(this->object_x_length * 0.5, this->object_y_length * 0.5),
@@ -88,7 +95,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
 #endif
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
@@ -102,10 +109,9 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
     size_t N = m_particles.size();
 
-    vector <cv::Mat> particles_color_model(N);
+    vector <cv::Mat> particles_color_model(N);    
 
     auto compute_particles_color_model = [&](size_t i){
-        
         const cv::Rect particle_roi(
             m_particles[i].d->x - m_particles[i].d->object_x_length_pixels * 0.5,
             m_particles[i].d->y - m_particles[i].d->object_y_length_pixels * 0.5,
@@ -124,7 +130,17 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
         const cv::Mat mask = create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-
+        const cv::Mat roi_img(particle_roi_img.size(), particle_roi_img.type());
+        cv::Mat mask_3C;
+        cv::merge(std::vector<cv::Mat>{mask, mask, mask}, mask_3C);
+        bitwise_and(image_mat(particle_roi), mask_3C, roi_img);
+        if (i == 0){
+            particle_image.loadFromIplImage(new IplImage(particle_roi_img));
+            particle_window.showImage(particle_image);
+            std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
+            std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
+            std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;
+        }
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
     };
 
@@ -146,14 +162,16 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     //third, weight them
     auto weight_particle = [this, &particles_color_model] (size_t i){
         if (!particles_color_model[i].empty()) {
-            const double score = 1 - cv::compareHist(color_model, particles_color_model[i],
+            const double distance_hist = cv::compareHist(color_model, particles_color_model[i],
                                  CV_COMP_BHATTACHARYYA);
+            //const double score = 1.0f / (SQRT_2PI * SIGMA_COLOR) * exp(-0.5f * distance_hist * distance_hist / (SIGMA_COLOR * SIGMA_COLOR));
+            const double score = 1 - distance_hist;
             m_particles[i].log_w += log(score);
         } else {
             m_particles[i].log_w += log(std::numeric_limits<double>::min());
         }
     };
-/*
+
 #ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [this, &particles_color_model, &weight_particle](const tbb::blocked_range<size_t> &r) {
@@ -163,15 +181,14 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         }
     );
 #else
-*/
     for (size_t i = 0; i < N; i++) {
         weight_particle(i);
     }
-//#endif
+#endif
 
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::prediction_and_update_pfStandardProposal(
     const mrpt::obs::CActionCollection*,
     const mrpt::obs::CSensoryFrame * const observation,
@@ -185,11 +202,11 @@ void CImageParticleFilter<DEPTH_TYPE>::prediction_and_update_pfStandardProposal(
 
     update_particles_with_transition_model(dt, observation);
     weight_particles_with_model(observation);
-    print_particle_state();
+    //print_particle_state();
     // Resample is automatically performed by CParticleFilter when required.
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const pair<float, float> &x,
         const pair<float, float> &y, const pair<float, float> &z, const pair<float, float> &v_x,
         const pair<float, float> &v_y, const pair<float, float> &v_z, const pair<float, float> &object_axes_length,
@@ -235,7 +252,7 @@ void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const
     }
 }
 
-template<class DEPTH_TYPE>
+template<typename DEPTH_TYPE>
 float CImageParticleFilter<DEPTH_TYPE>::get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const
 {
     auto m_particles_filtered = m_particles;
