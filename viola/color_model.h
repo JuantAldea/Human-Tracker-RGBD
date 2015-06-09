@@ -108,10 +108,10 @@ cv::Mat sobel_operator(const cv::Mat &image)
 
     grad_x_float /= gradient_modulus;
     grad_y_float /= gradient_modulus;
-    std::vector<cv::Mat> gradients = {grad_x_float, grad_y_float};
+    //std::vector<cv::Mat> gradients = {grad_x_float, grad_y_float};
 
     cv::Mat gradient_vectors;
-    cv::merge(gradients, gradient_vectors);
+    cv::merge(std::vector<cv::Mat> {grad_x_float, grad_y_float}, gradient_vectors);
 
     cv::Mat gradient_modulus_scaled;
     double min, max;

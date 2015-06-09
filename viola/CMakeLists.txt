@@ -1,6 +1,6 @@
 PROJECT(viola)
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
 
 SET(CMAKE_MODULE_PATH ${viola_SOURCE_DIR}/CMakeModules/)
@@ -78,7 +78,6 @@ TARGET_LINK_LIBRARIES(ImageRegistration
     ${DEPTH_REGISTRATION_LIBRARY}
 )
 
-
 TARGET_LINK_LIBRARIES(particle_filter_main
      ImageParticleFilter
      FacesDetection
@@ -91,6 +90,7 @@ TARGET_LINK_LIBRARIES(particle_filter_main
      ${DEPTH_REGISTRATION_LIBRARY}
      ImageRegistration
 )
+
 
 TARGET_LINK_LIBRARIES(image_registration_example
     ${OpenCV_LIBS}
@@ -118,6 +118,8 @@ TARGET_LINK_LIBRARIES(Protonect-reg
   ${DEPTH_REGISTRATION_LIBRARY}
   ImageRegistration
 )
+
+
 
 #TARGET_LINK_LIBRARIES(particle_filter_cd ${MRPT_LIBS} ${OpenCV_LIBS} ${TBB_LIBRARIES} ${freenect2_LIBRARY})
 #TARGET_LINK_LIBRARIES(objectDetection2 ${OpenCV_LIBS})

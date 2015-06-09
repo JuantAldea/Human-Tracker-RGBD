@@ -270,7 +270,9 @@ int particle_filter()
     CDisplayWindow model_candidate_window("model_candidate_window");
     CDisplayWindow model_histogram_window("model_histogram_window");
     CDisplayWindow model_candidate_histogram_window("model_candidate_histogram_window");
-    CDisplayWindow registered_color("registered_depth_color");
+    CDisplayWindow registered_color_window("registered_depth_color");
+    CDisplayWindow gradient_depth_window("gradient_depth_window");
+    CDisplayWindow gradient_color_window("gradient_color_window");
 
     // -------------------3D view stuff------------------
 #define _3D
@@ -352,7 +354,7 @@ int particle_filter()
         
         CImage registered_depth_image;
         registered_depth_image.loadFromIplImage(new IplImage(combined));
-        registered_color.showImage(registered_depth_image);
+        registered_color_window.showImage(registered_depth_image);
         
         color_frame = color_mat;
         depth_frame = registered_depth;
@@ -372,22 +374,23 @@ int particle_filter()
         observation.insert(obsImage_depth);
 
         /*
-        cv::Mat gradient = sobel_operator(color_frame);
-
+        cv::Mat gradient_color = sobel_operator(color_frame);
+        
+        CImage gradient_color_image;
+        gradient_color_image.loadFromIplImage(new IplImage(gradient_color));
+        gradient_color_window.showImage(gradient_color_image);
+        */
+        /*
         double min, max;
         cv::minMaxLoc(depth_frame, &min, &max);
         cv::Mat depth_frame_normalized = (depth_frame * 255)/ max;
         cv::Mat gradient_depth = sobel_operator(depth_frame_normalized);
         cv::Mat gradient_depth_8UC1 = cv::Mat(depth_frame.size(), CV_8UC1);
 
-        gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
-        CImage model_image;
-        model_image.loadFromIplImage(new IplImage(gradient));
-
-        CImage depth_image;
-        depth_image.loadFromIplImage(new IplImage(gradient_depth_8UC1));
-        depth_window.showImage(depth_image);
-        */
+        CImage gradient_depth_image;
+        gradient_depth_image.loadFromIplImage(new IplImage(gradient_depth));
+        gradient_depth_window.showImage(gradient_depth_image);
+        */        
 
         if (init_model) {
             cv::Mat frame_hsv;
