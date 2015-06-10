@@ -17,6 +17,9 @@ inline cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int n_dims);
 
 inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const float squared_radi_x_inverse, const float squared_radi_y_inverse);
 
+inline Eigen::Vector2f calculate_ellipse_normal(const int axis_x, const int axis_y, const float angle);
+
+inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int axis_y, const float angle);
 ////////////////////
 
 inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float depth, const float inv_fx, const float inv_fy, const float cx, const float cy);
@@ -83,6 +86,23 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
     cv::merge(mask_channels, mask_ndims);
 
     return mask_ndims;
+}
+
+inline Eigen::Vector2f calculate_ellipse_point(const cv::Point &center, const int axis_x, const int axis_y, const float angle)
+{
+    return Eigen::Vector2f(axis_x * cos(angle) + center.x, axis_y * sin(angle) + center.y);
+}
+
+inline Eigen::Vector2f calculate_ellipse_normal(const int axis_x, const int axis_y, const float angle)
+{
+    return Eigen::Vector2f(axis_x * cos(angle), axis_y * sin(angle));
+}
+
+inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int axis_y, const float angle)
+{
+    Eigen::Vector2f normal = calculate_ellipse_normal(axis_x, axis_y, angle);
+    normal.normalize();
+    return normal;
 }
 
 ////////////////////////////////////////////////////////////

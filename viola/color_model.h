@@ -3,13 +3,14 @@
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
+
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
 IGNORE_WARNINGS_POP
 
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
 cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
-cv::Mat sobel_operator(const cv::Mat &image);
+std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image);
 
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
 {
@@ -78,7 +79,7 @@ cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
 }
 
 
-cv::Mat sobel_operator(const cv::Mat &image)
+std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
@@ -119,7 +120,7 @@ cv::Mat sobel_operator(const cv::Mat &image)
     cv::convertScaleAbs(gradient_modulus, gradient_modulus_scaled, 255/max);
 
     //cv::ellipse2Poly(cv::Mat(), cv::Point(), cv::Size(), 360, 0, 0, cv::Scalar(255, 0, 0), 1, 0);
-    return gradient_modulus_scaled;
+    return std::make_tuple(gradient_vectors, gradient_modulus, gradient_modulus_scaled);
 }
 /*
 std::vector<cv::Point> ellipse2Poly()

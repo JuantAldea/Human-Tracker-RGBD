@@ -372,14 +372,10 @@ int particle_filter()
         CSensoryFrame observation;
         observation.insert(obsImage_color);
         observation.insert(obsImage_depth);
-
-        /*
-        cv::Mat gradient_color = sobel_operator(color_frame);
         
-        CImage gradient_color_image;
-        gradient_color_image.loadFromIplImage(new IplImage(gradient_color));
-        gradient_color_window.showImage(gradient_color_image);
-        */
+        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
+        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
+        
         /*
         double min, max;
         cv::minMaxLoc(depth_frame, &min, &max);
@@ -520,6 +516,68 @@ int particle_filter()
                         const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
                         cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                         cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
+                        
+                        cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
+                        cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                        float dot_sum = 0;
+                        for (int i = 0; i < 90; i += 2){
+                            Eigen::Vector2f v = calculate_ellipse_normal(radius_x * 1.2, radius_y * 1.2, M_PI * i / 180.0f);
+                            v.normalize();
+
+                            Eigen::Vector2f v_1(v[0], v[1]);
+                            Eigen::Vector2f v_2(-v[0], -v[1]);
+                            Eigen::Vector2f v_3(-v[1], v[0]);
+                            Eigen::Vector2f v_4(v[1], -v[0]);
+                            
+                            //cv::circle(color_display_frame, cv::Point(cvRound(v_1[0]), cvRound(v_1[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
+                            //cv::circle(color_display_frame, cv::Point(cvRound(v_2[0]), cvRound(v_2[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
+                            //cv::circle(color_display_frame, cv::Point(cvRound(v_3[0]), cvRound(v_3[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
+                            //cv::circle(color_display_frame, cv::Point(cvRound(v_4[0]), cvRound(v_4[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
+                            
+                            cv::Point pixel_coordinates_1 = cv::Point(cvRound(v_1[0] * radius_x * 1.2), cvRound(v_1[1] * radius_y * 1.2)) + center;
+                            cv::Point pixel_coordinates_2 = cv::Point(cvRound(v_2[0] * radius_x * 1.2), cvRound(v_2[1] * radius_y * 1.2)) + center;
+                            cv::Point pixel_coordinates_3 = cv::Point(cvRound(v_3[0] * radius_x * 1.2), cvRound(v_3[1] * radius_y * 1.2)) + center;
+                            cv::Point pixel_coordinates_4 = cv::Point(cvRound(v_4[0] * radius_x * 1.2), cvRound(v_4[1] * radius_y * 1.2)) + center;
+
+
+                            cv::Point end_v1(pixel_coordinates_1 + cv::Point(v_1[0] * 10, v_1[1] * 10));
+                            cv::Point end_v2(pixel_coordinates_2 + cv::Point(v_2[0] * 10, v_2[1] * 10));
+                            cv::Point end_v3(pixel_coordinates_3 + cv::Point(v_3[0] * 10, v_3[1] * 10));
+                            cv::Point end_v4(pixel_coordinates_4 + cv::Point(v_4[0] * 10, v_4[1] * 10));
+                            
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_1, end_v1, cv::Scalar(0, 0, 255), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_2, end_v2, cv::Scalar(0, 0, 255), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_3, end_v3, cv::Scalar(0, 0, 255), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_4, end_v4, cv::Scalar(0, 0, 255), 1, 8, 0);
+
+                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_1, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
+                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_2, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
+                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_3, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
+                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_4, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
+
+                            const Eigen::Vector2f gradient_vector_1(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x)[1]);
+                            const Eigen::Vector2f gradient_vector_2(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x)[1]);
+                            const Eigen::Vector2f gradient_vector_3(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x)[1]);
+                            const Eigen::Vector2f gradient_vector_4(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x)[1]);
+
+                            const float dot_1 = std::abs((gradient_vector_1.array() * v_1.array()).sum());
+                            const float dot_2 = std::abs((gradient_vector_2.array() * v_2.array()).sum());
+                            const float dot_3 = std::abs((gradient_vector_3.array() * v_3.array()).sum());
+                            const float dot_4 = std::abs((gradient_vector_4.array() * v_4.array()).sum());
+
+                            dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
+                            
+                            cv::Point end_1(pixel_coordinates_1 + cv::Point(gradient_vector_1[0] * 10, gradient_vector_1[1] * 10));
+                            cv::Point end_2(pixel_coordinates_2 + cv::Point(gradient_vector_2[0] * 10, gradient_vector_2[1] * 10));
+                            cv::Point end_3(pixel_coordinates_3 + cv::Point(gradient_vector_3[0] * 10, gradient_vector_3[1] * 10));
+                            cv::Point end_4(pixel_coordinates_4 + cv::Point(gradient_vector_4[0] * 10, gradient_vector_4[1] * 10));
+                            
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_1, end_1, cv::Scalar(180, 180, 180), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_2, end_2, cv::Scalar(180, 180, 180), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_3, end_3, cv::Scalar(180, 180, 180), 1, 8, 0);
+                            cv::arrowedLine(color_display_frame, pixel_coordinates_4, end_4, cv::Scalar(180, 180, 180), 1, 8, 0);
+                        }
+                        std::cout << "FITTING  SCORE " << dot_sum / 180.0f << std::endl;
                     }
 
                     if (score > LIKEHOOD_UPDATE){
@@ -543,6 +601,7 @@ int particle_filter()
         particles.last_time = cv::getTickCount();
 
         size_t N = particles.m_particles.size();
+        
 
         for (size_t i = 0; i < N; i++) {
             cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
@@ -551,7 +610,12 @@ int particle_filter()
         
         cv::line(color_display_frame, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
-                
+
+        
+        CImage gradient_magnitude_image;
+        gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
+        gradient_color_window.showImage(gradient_magnitude_image);
+        
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(frame_particles);

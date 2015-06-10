@@ -102,12 +102,14 @@ TARGET_LINK_LIBRARIES(image_registration_example
 TARGET_LINK_LIBRARIES(calibration_pairs
     ${OpenCV_LIBS}
     ${freenect2_LIBRARY}
+    ${OpenCL_LIBRARIES}
 )
 
 TARGET_LINK_LIBRARIES(kinect_3d_view
     KinectCamera
     ${MRPT_LIBS}
     ${OpenCV_LIBS}
+    ${OpenCL_LIBRARIES}
     ${freenect2_LIBRARY}
 )
 
