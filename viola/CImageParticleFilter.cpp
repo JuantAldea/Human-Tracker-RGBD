@@ -103,13 +103,17 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     ASSERT_(obs_image);
 
     const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
-
     cv::Mat frame_hsv;
     cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
+    
+    cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
+    std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(image_mat);
+    
 
     size_t N = m_particles.size();
 
-    vector <cv::Mat> particles_color_model(N);    
+    vector <cv::Mat> particles_color_model(N);
+    vector <float> particles_ellipse_fitting(N);
 
     auto compute_particles_color_model = [&](size_t i){
         const cv::Rect particle_roi(
@@ -134,41 +138,97 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         cv::Mat mask_3C;
         cv::merge(std::vector<cv::Mat>{mask, mask, mask}, mask_3C);
         bitwise_and(image_mat(particle_roi), mask_3C, roi_img);
+
         if (i == 0){
             particle_image.loadFromIplImage(new IplImage(particle_roi_img));
             particle_window.showImage(particle_image);
-            std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
-            std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
-            std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;
+            //std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
+            //std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
+            //std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;
         }
+
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
     };
 
 #ifdef USE_INTEL_TBB
     //tbb::concurrent_vector <cv::Mat> particles_color_model(N);
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
-        [this, &frame_hsv, &particles_color_model, &compute_particles_color_model](const tbb::blocked_range<size_t> &r) {
+        [this, &frame_hsv, &particles_color_model, &compute_particles_color_model, &gradient_vectors, &gradient_magnitude, &particles_ellipse_fitting](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 compute_particles_color_model(i);
+                //continue;
+                if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
+                   continue;
+                }
+                particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
+                    cv::Point(m_particles[i].d->x, m_particles[i].d->y),
+                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, 2, gradient_vectors, gradient_magnitude);
+
+                if (i == 0){
+                    std::cout << "FITTING 0 " << particles_ellipse_fitting[i] << std::endl;
+                    //std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
+                    //std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
+                    //std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;
+                }
             }
         }
     );
 #else
     for (size_t i = 0; i < N; i++) {
         compute_particles_color_model(i);
+        //continue;
+        if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
+            continue;
+        }
+
+        particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
+                    cv::Point(m_particles[i].d->x, m_particles[i].d->y),
+                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, 2, gradient_vectors, gradient_magnitude);
+    }
+#endif
+    double sum_gradient_fitting = 0;
+#ifdef USE_INTEL_TBB
+    sum_gradient_fitting = tbb::parallel_reduce(
+        tbb::blocked_range<vector<float>::const_iterator>(particles_ellipse_fitting.begin(), particles_ellipse_fitting.end(),
+            particles_ellipse_fitting.size() / TBB_PARTITIONS), 0.f,
+                [](const tbb::blocked_range<vector<float>::const_iterator> &r, double value) -> double {
+                    return std::accumulate(r.begin(), r.end(), value,
+                        [](double value, const float fitting) -> double {
+                            return fitting + value;
+                        }
+                    );
+                },
+            std::plus<double>()
+        );
+#else
+#endif
+
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [this, &particles_ellipse_fitting, sum_gradient_fitting](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                particles_ellipse_fitting[i] /= sum_gradient_fitting;
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++) {
+        particles_ellipse_fitting[i] /= sum_gradient_fitting;
     }
 #endif
 
     //third, weight them
-    auto weight_particle = [this, &particles_color_model] (size_t i){
+    auto weight_particle = [this, &particles_color_model, &particles_ellipse_fitting] (size_t i){
         if (!particles_color_model[i].empty()) {
             const double distance_hist = cv::compareHist(color_model, particles_color_model[i],
                                  CV_COMP_BHATTACHARYYA);
-            //const double score = 1.0f / (SQRT_2PI * SIGMA_COLOR) * exp(-0.5f * distance_hist * distance_hist / (SIGMA_COLOR * SIGMA_COLOR));
-            const double score = 1 - distance_hist;
+            //const double score = (1 - distance_hist) * particles_ellipse_fitting[i];
+            const double score = particles_ellipse_fitting[i];
+            //std::cout << "SCORE: " << (1 - distance_hist) * particles_ellipse_fitting[i] << ' ' << (1 - distance_hist) << ' ' << particles_ellipse_fitting[i] << std::endl;
             m_particles[i].log_w += log(score);
         } else {
             m_particles[i].log_w += log(std::numeric_limits<double>::min());
+            //m_particles[i].log_w += 0;
         }
     };
 

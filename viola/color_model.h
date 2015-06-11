@@ -137,3 +137,72 @@ std::vector<cv::Point> ellipse2Poly()
 }
 */
 
+float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step, const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
+{
+    float dot_sum = 0;
+    
+    const float total_steps = 360.0 / angle_step;
+    
+    for (int i = 0; i < 90; i += angle_step){
+        Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / total_steps);
+        v.normalize();
+
+        const cv::Vec2f v_1(v[0], v[1]);
+        const cv::Vec2f v_2(-v[0], -v[1]);
+        const cv::Vec2f v_3(-v[1], v[0]);
+        const cv::Vec2f v_4(v[1], -v[0]);
+
+        const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
+        const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
+        const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));
+        const cv::Point pixel_coordinates_4 = center + cv::Point(cvRound(v_4[0] * radius_x), cvRound(v_4[1] * radius_y));
+
+        const cv::Vec2f &gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x);
+        const cv::Vec2f &gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x);
+        const cv::Vec2f &gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
+        const cv::Vec2f &gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        
+        const float magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
+        const float magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
+        const float magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3.y, pixel_coordinates_3.x);
+        const float magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        
+        
+        const float dot_1 = magnitude_v1 * std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
+        const float dot_2 = magnitude_v2 * std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
+        const float dot_3 = magnitude_v3 * std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
+        const float dot_4 = magnitude_v4 * std::abs(gradient_v4[0] * v_4[0] + gradient_v4[1] * v_4[1]);
+/*
+        const float dot_1 = std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
+        const float dot_2 = std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
+        const float dot_3 = std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
+        const float dot_4 = std::abs(gradient_v4[0] * v_4[0] + gradient_v4[1] * v_4[1]);
+*/    
+        dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
+        
+        
+        if (output != nullptr){
+            const cv::Point end_model_v1(pixel_coordinates_1 + cv::Point(cvRound(v_1[0] * 10), cvRound(v_1[1] * 10)));
+            const cv::Point end_model_v2(pixel_coordinates_2 + cv::Point(cvRound(v_2[0] * 10), cvRound(v_2[1] * 10)));
+            const cv::Point end_model_v3(pixel_coordinates_3 + cv::Point(cvRound(v_3[0] * 10), cvRound(v_3[1] * 10)));
+            const cv::Point end_model_v4(pixel_coordinates_4 + cv::Point(cvRound(v_4[0] * 10), cvRound(v_4[1] * 10)));
+
+            cv::arrowedLine(*output, pixel_coordinates_1, end_model_v1, cv::Scalar(0, 0, 255), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_2, end_model_v2, cv::Scalar(0, 0, 255), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_3, end_model_v3, cv::Scalar(0, 0, 255), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_4, end_model_v4, cv::Scalar(0, 0, 255), 1, 8, 0);
+
+            const cv::Point end_1(pixel_coordinates_1 + cv::Point(cvRound(gradient_v1[0] * 10), cvRound(gradient_v1[1] * 10)));
+            const cv::Point end_2(pixel_coordinates_2 + cv::Point(cvRound(gradient_v2[0] * 10), cvRound(gradient_v2[1] * 10)));
+            const cv::Point end_3(pixel_coordinates_3 + cv::Point(cvRound(gradient_v3[0] * 10), cvRound(gradient_v3[1] * 10)));
+            const cv::Point end_4(pixel_coordinates_4 + cv::Point(cvRound(gradient_v4[0] * 10), cvRound(gradient_v4[1] * 10)));
+            
+            cv::arrowedLine(*output, pixel_coordinates_1, end_1, cv::Scalar(180, 180, 180), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_2, end_2, cv::Scalar(180, 180, 180), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_3, end_3, cv::Scalar(180, 180, 180), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_4, end_4, cv::Scalar(180, 180, 180), 1, 8, 0);
+        }
+    }
+
+    return dot_sum / total_steps;
+}

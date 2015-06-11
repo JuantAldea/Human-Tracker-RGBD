@@ -51,6 +51,7 @@ libfreenect2::SyncMultiFrameListener *listener;
 libfreenect2::FrameMap frames_kinect2;
 libfreenect2::PacketPipeline *pipeline;
 
+#define PERCENTAGE 1
 void close_kinect2_handler(void)
 {
     dev->stop();
@@ -426,7 +427,7 @@ int particle_filter()
                 //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
                 const cv::Rect model_roi(top_corner[0] + (bottom_corner[0] - top_corner[0]) * 0.1,
                     top_corner[1] + (bottom_corner[1] - top_corner[1]) * 0.1,
-                    (bottom_corner[0] - top_corner[0]) * 0.8, (bottom_corner[1] - top_corner[1]) * 0.8);
+                    (bottom_corner[0] - top_corner[0]) * PERCENTAGE, (bottom_corner[1] - top_corner[1]) * PERCENTAGE);
 
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
                 cv::Mat color_roi = color_frame(model_roi);
@@ -438,12 +439,12 @@ int particle_filter()
 
                 std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
                 particles.initializeParticles(NUM_PARTICLES, 
-                    make_pair(center.x, x_radius * 0.8), make_pair(center.y, y_radius * 0.8), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
+                    make_pair(center.x, x_radius * PERCENTAGE), make_pair(center.y, y_radius * PERCENTAGE), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
                     //make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(0, 250.f),
                     //make_pair(center.x, 0), make_pair(center.y, 0), make_pair(0, 25),
                     //make_pair(0, 500), make_pair(0, 500), make_pair(0, 500),
                     make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                    make_pair(0.12 * 0.8, 0.12 * 0.8),
+                    make_pair(0.12 * PERCENTAGE, 0.12 * PERCENTAGE),
                     reg
                 );
 
@@ -480,9 +481,8 @@ int particle_filter()
                 std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y),
                     //depth_frame.at<DEPTH_TYPE>(cvRound(color_display_frame.rows/2), cvRound(color_display_frame.cols/2)),
                     depth_frame.at<DEPTH_TYPE>(cvRound(avrg_y), cvRound(avrg_x)),
-                    Eigen::Vector2f(0.06*0.8, 0.06*0.8), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                    Eigen::Vector2f(0.06*PERCENTAGE, 0.06*PERCENTAGE), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
-                std::cout << top_corner << std::endl << bottom_corner << std::endl;
                 const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
 
  
@@ -517,67 +517,13 @@ int particle_filter()
                         cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                         cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
                         
-                        cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
-                        cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                        float dot_sum = 0;
-                        for (int i = 0; i < 90; i += 2){
-                            Eigen::Vector2f v = calculate_ellipse_normal(radius_x * 1.2, radius_y * 1.2, M_PI * i / 180.0f);
-                            v.normalize();
-
-                            Eigen::Vector2f v_1(v[0], v[1]);
-                            Eigen::Vector2f v_2(-v[0], -v[1]);
-                            Eigen::Vector2f v_3(-v[1], v[0]);
-                            Eigen::Vector2f v_4(v[1], -v[0]);
-                            
-                            //cv::circle(color_display_frame, cv::Point(cvRound(v_1[0]), cvRound(v_1[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
-                            //cv::circle(color_display_frame, cv::Point(cvRound(v_2[0]), cvRound(v_2[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
-                            //cv::circle(color_display_frame, cv::Point(cvRound(v_3[0]), cvRound(v_3[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
-                            //cv::circle(color_display_frame, cv::Point(cvRound(v_4[0]), cvRound(v_4[1])), 3, cv::Scalar(255, 255, 0), -1, 8, 0);
-                            
-                            cv::Point pixel_coordinates_1 = cv::Point(cvRound(v_1[0] * radius_x * 1.2), cvRound(v_1[1] * radius_y * 1.2)) + center;
-                            cv::Point pixel_coordinates_2 = cv::Point(cvRound(v_2[0] * radius_x * 1.2), cvRound(v_2[1] * radius_y * 1.2)) + center;
-                            cv::Point pixel_coordinates_3 = cv::Point(cvRound(v_3[0] * radius_x * 1.2), cvRound(v_3[1] * radius_y * 1.2)) + center;
-                            cv::Point pixel_coordinates_4 = cv::Point(cvRound(v_4[0] * radius_x * 1.2), cvRound(v_4[1] * radius_y * 1.2)) + center;
-
-
-                            cv::Point end_v1(pixel_coordinates_1 + cv::Point(v_1[0] * 10, v_1[1] * 10));
-                            cv::Point end_v2(pixel_coordinates_2 + cv::Point(v_2[0] * 10, v_2[1] * 10));
-                            cv::Point end_v3(pixel_coordinates_3 + cv::Point(v_3[0] * 10, v_3[1] * 10));
-                            cv::Point end_v4(pixel_coordinates_4 + cv::Point(v_4[0] * 10, v_4[1] * 10));
-                            
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_1, end_v1, cv::Scalar(0, 0, 255), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_2, end_v2, cv::Scalar(0, 0, 255), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_3, end_v3, cv::Scalar(0, 0, 255), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_4, end_v4, cv::Scalar(0, 0, 255), 1, 8, 0);
-
-                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_1, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
-                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_2, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
-                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_3, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
-                            //cv::circle(gradient_magnitude_scaled, pixel_coordinates_4, 3, cv::Scalar(180, 180, 180), -1, 8, 0);
-
-                            const Eigen::Vector2f gradient_vector_1(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x)[1]);
-                            const Eigen::Vector2f gradient_vector_2(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x)[1]);
-                            const Eigen::Vector2f gradient_vector_3(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x)[1]);
-                            const Eigen::Vector2f gradient_vector_4(gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x)[0], gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x)[1]);
-
-                            const float dot_1 = std::abs((gradient_vector_1.array() * v_1.array()).sum());
-                            const float dot_2 = std::abs((gradient_vector_2.array() * v_2.array()).sum());
-                            const float dot_3 = std::abs((gradient_vector_3.array() * v_3.array()).sum());
-                            const float dot_4 = std::abs((gradient_vector_4.array() * v_4.array()).sum());
-
-                            dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
-                            
-                            cv::Point end_1(pixel_coordinates_1 + cv::Point(gradient_vector_1[0] * 10, gradient_vector_1[1] * 10));
-                            cv::Point end_2(pixel_coordinates_2 + cv::Point(gradient_vector_2[0] * 10, gradient_vector_2[1] * 10));
-                            cv::Point end_3(pixel_coordinates_3 + cv::Point(gradient_vector_3[0] * 10, gradient_vector_3[1] * 10));
-                            cv::Point end_4(pixel_coordinates_4 + cv::Point(gradient_vector_4[0] * 10, gradient_vector_4[1] * 10));
-                            
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_1, end_1, cv::Scalar(180, 180, 180), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_2, end_2, cv::Scalar(180, 180, 180), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_3, end_3, cv::Scalar(180, 180, 180), 1, 8, 0);
-                            cv::arrowedLine(color_display_frame, pixel_coordinates_4, end_4, cv::Scalar(180, 180, 180), 1, 8, 0);
+                        //cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
+                        //cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                        if (radius_x != 0 && radius_y != 0){
+                            float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, 2, gradient_vectors, gradient_magnitude, &color_display_frame);
+                            std::cout << "FITTING  SCORE " << fitting << std::endl;
+                            std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
                         }
-                        std::cout << "FITTING  SCORE " << dot_sum / 180.0f << std::endl;
                     }
 
                     if (score > LIKEHOOD_UPDATE){
@@ -587,6 +533,11 @@ int particle_filter()
                         model_image_window.showImage(model_frame);
                         particles.update_color_model(model);
                     }
+
+                    const cv::Point center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
+                    float fitting = ellipse_shape_gradient_test(center, 79, 79, 2, gradient_vectors, gradient_magnitude, &color_display_frame);
+                    ellipse_shape_gradient_test(center, 79, 79, 2, gradient_vectors, gradient_magnitude, &gradient_magnitude_scaled);
+                    std::cout << "FITTING  CENTER " << fitting << std::endl;
                 }
                 
                 
