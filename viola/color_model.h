@@ -83,7 +83,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
-    cv::GaussianBlur(orig, orig, cv::Size(3,3), 0, 0, cv::BORDER_DEFAULT);
+    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -96,9 +96,16 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::Mat gradient_modulus;
     cv::Mat image_gray_float;
     
+    cv::Mat image_gray2;
+    bilateralFilter ( image_gray, image_gray2, 15, 80, 80 );
+    image_gray = image_gray2;
+    
     image_gray.convertTo(image_gray_float, CV_32F);
-    cv::Sobel(image_gray_float, grad_x, CV_16S, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
-    cv::Sobel(image_gray_float, grad_y, CV_16S, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
+    cv::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
+    cv::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
+    
+
+
 
     cv::Mat grad_x_float, grad_y_float;
     grad_x.convertTo(grad_x_float, CV_32F);
@@ -122,6 +129,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     //cv::ellipse2Poly(cv::Mat(), cv::Point(), cv::Size(), 360, 0, 0, cv::Scalar(255, 0, 0), 1, 0);
     return std::make_tuple(gradient_vectors, gradient_modulus, gradient_modulus_scaled);
 }
+
 /*
 std::vector<cv::Point> ellipse2Poly()
 {
@@ -141,10 +149,10 @@ float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x,
 {
     float dot_sum = 0;
     
-    const float total_steps = 360.0 / angle_step;
+    const float total_steps = 360 / angle_step;
     
     for (int i = 0; i < 90; i += angle_step){
-        Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / total_steps);
+        Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
         v.normalize();
 
         const cv::Vec2f v_1(v[0], v[1]);
@@ -156,11 +164,17 @@ float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x,
         const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
         const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));
         const cv::Point pixel_coordinates_4 = center + cv::Point(cvRound(v_4[0] * radius_x), cvRound(v_4[1] * radius_y));
-
-        const cv::Vec2f &gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-        const cv::Vec2f &gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-        const cv::Vec2f &gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-        const cv::Vec2f &gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        /*
+        std:: cout << "CENTER " << center.x << ' ' << center.y << std::endl;
+        std:: cout << pixel_coordinates_1.y << ' ' << pixel_coordinates_1.x << std::endl;
+        std:: cout << pixel_coordinates_2.y << ' ' << pixel_coordinates_2.x << std::endl;
+        std:: cout << pixel_coordinates_3.y << ' ' << pixel_coordinates_3.x << std::endl;
+        std:: cout << pixel_coordinates_4.y << ' ' << pixel_coordinates_4.x << std::endl;
+        */
+        const cv::Vec2f gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x);
+        const cv::Vec2f gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x);
+        const cv::Vec2f gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
+        const cv::Vec2f gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
         
         const float magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
         const float magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
@@ -187,10 +201,10 @@ float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x,
             const cv::Point end_model_v3(pixel_coordinates_3 + cv::Point(cvRound(v_3[0] * 10), cvRound(v_3[1] * 10)));
             const cv::Point end_model_v4(pixel_coordinates_4 + cv::Point(cvRound(v_4[0] * 10), cvRound(v_4[1] * 10)));
 
-            cv::arrowedLine(*output, pixel_coordinates_1, end_model_v1, cv::Scalar(0, 0, 255), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_2, end_model_v2, cv::Scalar(0, 0, 255), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_3, end_model_v3, cv::Scalar(0, 0, 255), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_4, end_model_v4, cv::Scalar(0, 0, 255), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_1, end_model_v1, cv::Scalar(255, 0, 0), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_2, end_model_v2, cv::Scalar(255, 0, 0), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_3, end_model_v3, cv::Scalar(255, 0, 0), 1, 8, 0);
+            cv::arrowedLine(*output, pixel_coordinates_4, end_model_v4, cv::Scalar(255, 0, 0), 1, 8, 0);
 
             const cv::Point end_1(pixel_coordinates_1 + cv::Point(cvRound(gradient_v1[0] * 10), cvRound(gradient_v1[1] * 10)));
             const cv::Point end_2(pixel_coordinates_2 + cv::Point(cvRound(gradient_v2[0] * 10), cvRound(gradient_v2[1] * 10)));

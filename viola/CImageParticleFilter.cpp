@@ -156,13 +156,16 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         [this, &frame_hsv, &particles_color_model, &compute_particles_color_model, &gradient_vectors, &gradient_magnitude, &particles_ellipse_fitting](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 compute_particles_color_model(i);
+                if (particles_color_model[i].empty()){
+                    continue;
+                }
                 //continue;
                 if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
                    continue;
                 }
                 particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
                     cv::Point(m_particles[i].d->x, m_particles[i].d->y),
-                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, 2, gradient_vectors, gradient_magnitude);
+                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude);
 
                 if (i == 0){
                     std::cout << "FITTING 0 " << particles_ellipse_fitting[i] << std::endl;
@@ -176,6 +179,11 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 #else
     for (size_t i = 0; i < N; i++) {
         compute_particles_color_model(i);
+        
+        if(particles_color_model[i].empty()){
+            continue;
+        }
+        
         //continue;
         if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
             continue;
@@ -183,7 +191,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
         particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
                     cv::Point(m_particles[i].d->x, m_particles[i].d->y),
-                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, 2, gradient_vectors, gradient_magnitude);
+                    m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude);
     }
 #endif
     double sum_gradient_fitting = 0;
@@ -201,8 +209,45 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
             std::plus<double>()
         );
 #else
+    for (size_t i = 0; i < N; i++) {
+        sum_gradient_fitting += particles_ellipse_fitting[i];
+    }
 #endif
 
+float max_fitting = particles_ellipse_fitting[0];
+float min_fitting = particles_ellipse_fitting[0];
+for (size_t i = 0; i < N; i++) {
+    if (particles_ellipse_fitting[i] == 0){
+        continue;
+    }
+
+    min_fitting = std::min(min_fitting, particles_ellipse_fitting[i]);
+    max_fitting = std::max(max_fitting, particles_ellipse_fitting[i]);
+}
+
+float range_fitting = max_fitting - min_fitting;
+std::cout << "MAX " << max_fitting << " min " << min_fitting << std::endl;
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [this, &particles_ellipse_fitting, sum_gradient_fitting, min_fitting, range_fitting](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                if (particles_ellipse_fitting[i] == 0){
+                    continue;
+                }
+                particles_ellipse_fitting[i] = (particles_ellipse_fitting[i] - min_fitting) / range_fitting;
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++) {
+        if (particles_ellipse_fitting[i] == 0){
+            continue;
+        }
+        particles_ellipse_fitting[i] = (particles_ellipse_fitting[i] - min_fitting) / range_fitting;
+    }
+#endif
+
+/*
 #ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [this, &particles_ellipse_fitting, sum_gradient_fitting](const tbb::blocked_range<size_t> &r) {
@@ -216,14 +261,15 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         particles_ellipse_fitting[i] /= sum_gradient_fitting;
     }
 #endif
-
+*/
     //third, weight them
     auto weight_particle = [this, &particles_color_model, &particles_ellipse_fitting] (size_t i){
         if (!particles_color_model[i].empty()) {
-            const double distance_hist = cv::compareHist(color_model, particles_color_model[i],
-                                 CV_COMP_BHATTACHARYYA);
-            //const double score = (1 - distance_hist) * particles_ellipse_fitting[i];
-            const double score = particles_ellipse_fitting[i];
+            const double distance_hist = cv::compareHist(color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+            double score = 1;
+            //score *= (1 - distance_hist) * particles_ellipse_fitting[i];
+            score *= (1 - distance_hist);
+            //score *= particles_ellipse_fitting[i];
             //std::cout << "SCORE: " << (1 - distance_hist) * particles_ellipse_fitting[i] << ' ' << (1 - distance_hist) << ' ' << particles_ellipse_fitting[i] << std::endl;
             m_particles[i].log_w += log(score);
         } else {
@@ -368,6 +414,26 @@ float CImageParticleFilter<DEPTH_TYPE>::get_mean(float &x, float &y, float &z, f
         vy += float(w * it->d->vy);
         vz += float(w * it->d->vz);
     }
+
+    /*
+    double max_w = std::numeric_limits<double>::min();
+    CParticleList::const_iterator max_it;
+    for (CParticleList::const_iterator it = m_particles_filtered.begin(); it != m_particles_filtered.end(); it++) {
+        const double w = exp(it->log_w) / sumW;
+        if (w > max_w){
+            max_it = it;
+        }
+    }
+
+    x = float(max_it->d->x);
+    y = float(max_it->d->y);
+    z = float(max_it->d->z);
+
+    vx = float(max_it->d->vx);
+    vy = float(max_it->d->vy);
+    vz = float(max_it->d->vz);
+    */
+
 
     cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
     return sumW / m_particles.size();

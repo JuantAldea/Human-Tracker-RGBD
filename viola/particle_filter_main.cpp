@@ -51,7 +51,6 @@ libfreenect2::SyncMultiFrameListener *listener;
 libfreenect2::FrameMap frames_kinect2;
 libfreenect2::PacketPipeline *pipeline;
 
-#define PERCENTAGE 1
 void close_kinect2_handler(void)
 {
     dev->stop();
@@ -484,9 +483,10 @@ int particle_filter()
                     Eigen::Vector2f(0.06*PERCENTAGE, 0.06*PERCENTAGE), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
                 const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
-
+                const int radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
+                const int radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
+                const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
  
-                
                 // test whether the estimated roi lies inside of the image frame or not
                 const cv::Rect rectangle_image = cv::Rect(cv::Point(0, 0), color_frame.size());
                 const cv::Rect rectangle_image_roi_intersection = rectangle_image & model_roi;
@@ -500,7 +500,17 @@ int particle_filter()
                     const double distance_hist = cv::compareHist(model, particles.color_model, CV_COMP_BHATTACHARYYA);
                     const double score = 1 - distance_hist;
                     //const double score = (1.0f / (SQRT_2PI * SIGMA_COLOR)) * exp(-0.5f * distance_hist * distance_hist / (SIGMA_COLOR * SIGMA_COLOR));
-                    std::cout << "MEAN LIKEHOOD " << score << std::endl;
+                    std::ostringstream oss;
+                    oss << "BHATTACHARYYA: " << score << "\n";
+
+                    //std::cout << "BHATTACHARYYA: " << score << std::endl;
+                    
+                    if (radius_x != 0 && radius_y != 0){
+                        float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                        oss << "FITTING: " << fitting << "\r\n";
+                        //std::cout << "FITTING  SCORE " << fitting << std::endl;
+                        //std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
+                    }
 
                     CImage model_candidate;
                     model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
@@ -511,19 +521,11 @@ int particle_filter()
                     model_candidate_histogram_window.showImage(model_candidate_histogram_image);
                     
                     if (score > LIKEHOOD_FOUND){
-                        const int radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
-                        const int radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
-                        const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
                         cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                         cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
                         
                         //cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
                         //cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                        if (radius_x != 0 && radius_y != 0){
-                            float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, 2, gradient_vectors, gradient_magnitude, &color_display_frame);
-                            std::cout << "FITTING  SCORE " << fitting << std::endl;
-                            std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
-                        }
                     }
 
                     if (score > LIKEHOOD_UPDATE){
@@ -535,9 +537,20 @@ int particle_filter()
                     }
 
                     const cv::Point center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
-                    float fitting = ellipse_shape_gradient_test(center, 79, 79, 2, gradient_vectors, gradient_magnitude, &color_display_frame);
-                    ellipse_shape_gradient_test(center, 79, 79, 2, gradient_vectors, gradient_magnitude, &gradient_magnitude_scaled);
-                    std::cout << "FITTING  CENTER " << fitting << std::endl;
+                    float fitting = ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                    ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &gradient_magnitude_scaled);
+                    oss << "FITTING  CENTER " << fitting << std::endl;
+                    {
+                        int fontFace =  cv::FONT_HERSHEY_PLAIN;
+                        double fontScale = 2;
+                        int thickness = 2;
+
+                        int baseline = 0;
+                        cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
+                        cv::Point textOrg(0, textSize.height + 10);
+                        //cv::Point textOrg(textSize.width, textSize.height);
+                        putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+                    }
                 }
                 
                 
