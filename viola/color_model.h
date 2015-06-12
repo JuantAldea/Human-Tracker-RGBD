@@ -83,7 +83,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
-    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
+    cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -104,6 +104,8 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
     cv::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
     
+    //cv::medianBlur ( grad_x, grad_x, 5 );
+    //cv::medianBlur ( grad_y, grad_y, 5 );
 
 
 
@@ -145,7 +147,8 @@ std::vector<cv::Point> ellipse2Poly()
 }
 */
 
-float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step, const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
+float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
+    const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
 {
     float dot_sum = 0;
     
@@ -176,11 +179,22 @@ float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x,
         const cv::Vec2f gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
         const cv::Vec2f gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
         
-        const float magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-        const float magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-        const float magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-        const float magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        float magnitude_v1;
+        float magnitude_v2;
+        float magnitude_v3;
+        float magnitude_v4;
         
+        if (!gradient_magnitude.empty()){
+            magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
+            magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
+            magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3.y, pixel_coordinates_3.x);
+            magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        }else{
+            magnitude_v1 = 1;
+            magnitude_v2 = 1;
+            magnitude_v3 = 1;
+            magnitude_v4 = 1;
+        }
         
         const float dot_1 = magnitude_v1 * std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
         const float dot_2 = magnitude_v2 * std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);

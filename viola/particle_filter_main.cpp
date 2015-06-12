@@ -501,13 +501,14 @@ int particle_filter()
                     const double score = 1 - distance_hist;
                     //const double score = (1.0f / (SQRT_2PI * SIGMA_COLOR)) * exp(-0.5f * distance_hist * distance_hist / (SIGMA_COLOR * SIGMA_COLOR));
                     std::ostringstream oss;
-                    oss << "BHATTACHARYYA: " << score << "\n";
+                    oss << "BHATTACHARYYA: " << score << " ";
 
                     //std::cout << "BHATTACHARYYA: " << score << std::endl;
                     
                     if (radius_x != 0 && radius_y != 0){
-                        float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                        oss << "FITTING: " << fitting << "\r\n";
+                        float fitting_magnitude = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                        float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
+                        oss << "FITTING: " << fitting << "(" << fitting_magnitude << ") ";
                         //std::cout << "FITTING  SCORE " << fitting << std::endl;
                         //std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
                     }
@@ -538,8 +539,8 @@ int particle_filter()
 
                     const cv::Point center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
                     float fitting = ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                    ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &gradient_magnitude_scaled);
-                    oss << "FITTING  CENTER " << fitting << std::endl;
+                    float fitting_01 = ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+                    oss << "FITTING CENTER: " << fitting_01 << " (" << fitting << ")";
                     {
                         int fontFace =  cv::FONT_HERSHEY_PLAIN;
                         double fontScale = 2;
