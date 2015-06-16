@@ -1,6 +1,7 @@
 #pragma once
 
 #include "project_config.h"
+#include "ellipse_functions.h"
 
 IGNORE_WARNINGS_PUSH
 
@@ -11,6 +12,52 @@ IGNORE_WARNINGS_POP
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
 cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image);
+
+cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &mask, const cv::Mat &weights, const int ndims, const int hist_size[], const float * const ranges[])
+{
+    cv::Mat hist = cv::Mat::zeros(hist_size[0], hist_size[1], CV_32FC1);
+    
+    float bin_widths[ndims];
+    for (int c = 0; c < ndims; c++){
+        bin_widths[c] = (ranges[c][1] - ranges[c][0]) / hist_size[c];
+    }
+    //const float bin_width_1 = (ranges[0][1] - ranges[0][0]) / hist_size[0];
+    //const float bin_width_2 = (ranges[1][1] - ranges[1][0]) / hist_size[1];
+
+    const int img_channels = image.channels();
+    for (int i = 0; i < image.rows; i++){
+        for (int j = 0; j < image.cols; j++){
+            if (mask.at<uchar>(i, j)){
+                uint bins[ndims];
+                for (int c = 0; c < ndims; c++){
+                    const uchar value = image.at<uchar>(i, j * img_channels + channels[c]);
+                    bins[c] = value / bin_widths[c];
+                    //const uint bin_h = hsv[0] / bin_width_1;
+                    //const uint bin_s = hsv[1] / bin_width_2;
+                }
+                //const cv::Vec3b hsv = image.at<cv::Vec3b>(i, j);
+                //const uint bin_h = hsv[0] / bin_width_1;
+                //const uint bin_s = hsv[1] / bin_width_2;
+                //hist.at<float>(bin_h, bin_s) += 1;
+                hist.at<float>(bins[0], bins[1]) += 1;
+                float *p = hist.ptr<float>(0);
+                /*
+                for (int c = 0; c < ndims - 1; c++){
+                    p += hist_size[c] * bins[c];
+                }
+                */
+                p += hist_size[0] * bins[0];
+                p += hist_size[1] * bins[1];
+                *p += 1;
+                //make
+                p[bins[ndims - 1]] += 1;
+                
+
+            }
+        }
+    }
+    return hist;
+}
 
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
 {
@@ -32,32 +79,63 @@ cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
         const int channels[] = {0, 1};
         cv::calcHist(&hsv, 1, channels, mask, histogram, 2, histSize, ranges, true, false);
     }
-
+    /*
     cv::Mat histogram_v;
     {
         const int channels[] = {2};
         const int histSize[] = {sbins};
         const float range[] = {0, 256} ;
-        const float* histRange = {range};
-        cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, &histRange, true, false);
+        const float *ranges[] = {range};
+        cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, ranges, true, false);
     }
 
     histogram_v = histogram_v.t();
     histogram.push_back(histogram_v);
+    
+    */
+    cv::Scalar sum = cv::sum(histogram);
+    histogram /= sum[0];
+    
+    return histogram;
+}
 
-    double sum = 0;
-    for (int h = 0; h < histogram.rows; h++) {
-        for (int s = 0; s < histogram.cols; s++) {
-            sum += histogram.at<float>(h, s);
-        }
+cv::Mat compute_color_model2(const cv::Mat &hsv, const cv::Mat &mask)
+{
+    // Quantize the hue to 30 levels
+    // and the saturation to 32 levels
+    cv::Mat histogram;
+    const int hbins = 31;
+    const int sbins = 32;
+
+    {
+        // hue varies from 0 to 179, it's scaled down by a half
+        const int histSize[] = {hbins, sbins};
+        // so that it fits in a byte.
+        const float hranges[] = {0, 180};
+        // saturation varies from 0 (black-gray-white) to
+        // 255 (pure spectrum color)
+        const float sranges[] = {0, 256};
+        const float* ranges[] = {hranges, sranges};
+        const int channels[] = {0, 1};
+        //cv::calcHist(&hsv, 1, channels, mask, histogram, 2, histSize, ranges, true, false);
+        histogram = calc_hist2D(hsv, channels, mask, cv::Mat(), 2, histSize, ranges);
+    }
+    /*
+    cv::Mat histogram_v;
+    {
+        const int channels[] = {2};
+        const int histSize[] = {sbins};
+        const float range[] = {0, 256} ;
+        const float *ranges[] = {range};
+        //cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, &histRange, true, false);
+        histogram = calc_hist2D(hsv, channels, mask, cv::Mat(), 1, histSize, ranges);
     }
 
-    for (int h = 0; h < histogram.rows; h++) {
-        for (int s = 0; s < histogram.cols; s++) {
-            histogram.at<float>(h, s) /= sum;
-        }
-    }
-
+    histogram_v = histogram_v.t();
+    histogram.push_back(histogram_v);
+    */
+    cv::Scalar sum = cv::sum(histogram);
+    histogram /= sum[0];
     return histogram;
 }
 
@@ -83,7 +161,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
-    cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
+    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -96,9 +174,9 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::Mat gradient_modulus;
     cv::Mat image_gray_float;
     
-    cv::Mat image_gray2;
-    bilateralFilter ( image_gray, image_gray2, 15, 80, 80 );
-    image_gray = image_gray2;
+    //cv::Mat image_gray2;
+    //bilateralFilter ( image_gray, image_gray2, 15, 80, 80 );
+    //image_gray = image_gray2;
     
     image_gray.convertTo(image_gray_float, CV_32F);
     cv::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
@@ -147,90 +225,3 @@ std::vector<cv::Point> ellipse2Poly()
 }
 */
 
-float ellipse_shape_gradient_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
-    const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
-{
-    float dot_sum = 0;
-    
-    const float total_steps = 360 / angle_step;
-    
-    for (int i = 0; i < 90; i += angle_step){
-        Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
-        v.normalize();
-
-        const cv::Vec2f v_1(v[0], v[1]);
-        const cv::Vec2f v_2(-v[0], -v[1]);
-        const cv::Vec2f v_3(-v[1], v[0]);
-        const cv::Vec2f v_4(v[1], -v[0]);
-
-        const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
-        const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
-        const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));
-        const cv::Point pixel_coordinates_4 = center + cv::Point(cvRound(v_4[0] * radius_x), cvRound(v_4[1] * radius_y));
-        /*
-        std:: cout << "CENTER " << center.x << ' ' << center.y << std::endl;
-        std:: cout << pixel_coordinates_1.y << ' ' << pixel_coordinates_1.x << std::endl;
-        std:: cout << pixel_coordinates_2.y << ' ' << pixel_coordinates_2.x << std::endl;
-        std:: cout << pixel_coordinates_3.y << ' ' << pixel_coordinates_3.x << std::endl;
-        std:: cout << pixel_coordinates_4.y << ' ' << pixel_coordinates_4.x << std::endl;
-        */
-        const cv::Vec2f gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-        const cv::Vec2f gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-        const cv::Vec2f gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-        const cv::Vec2f gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
-        
-        float magnitude_v1;
-        float magnitude_v2;
-        float magnitude_v3;
-        float magnitude_v4;
-        
-        if (!gradient_magnitude.empty()){
-            magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-            magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-            magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-            magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4.y, pixel_coordinates_4.x);
-        }else{
-            magnitude_v1 = 1;
-            magnitude_v2 = 1;
-            magnitude_v3 = 1;
-            magnitude_v4 = 1;
-        }
-        
-        const float dot_1 = magnitude_v1 * std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
-        const float dot_2 = magnitude_v2 * std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
-        const float dot_3 = magnitude_v3 * std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
-        const float dot_4 = magnitude_v4 * std::abs(gradient_v4[0] * v_4[0] + gradient_v4[1] * v_4[1]);
-/*
-        const float dot_1 = std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
-        const float dot_2 = std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
-        const float dot_3 = std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
-        const float dot_4 = std::abs(gradient_v4[0] * v_4[0] + gradient_v4[1] * v_4[1]);
-*/    
-        dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
-        
-        
-        if (output != nullptr){
-            const cv::Point end_model_v1(pixel_coordinates_1 + cv::Point(cvRound(v_1[0] * 10), cvRound(v_1[1] * 10)));
-            const cv::Point end_model_v2(pixel_coordinates_2 + cv::Point(cvRound(v_2[0] * 10), cvRound(v_2[1] * 10)));
-            const cv::Point end_model_v3(pixel_coordinates_3 + cv::Point(cvRound(v_3[0] * 10), cvRound(v_3[1] * 10)));
-            const cv::Point end_model_v4(pixel_coordinates_4 + cv::Point(cvRound(v_4[0] * 10), cvRound(v_4[1] * 10)));
-
-            cv::arrowedLine(*output, pixel_coordinates_1, end_model_v1, cv::Scalar(255, 0, 0), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_2, end_model_v2, cv::Scalar(255, 0, 0), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_3, end_model_v3, cv::Scalar(255, 0, 0), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_4, end_model_v4, cv::Scalar(255, 0, 0), 1, 8, 0);
-
-            const cv::Point end_1(pixel_coordinates_1 + cv::Point(cvRound(gradient_v1[0] * 10), cvRound(gradient_v1[1] * 10)));
-            const cv::Point end_2(pixel_coordinates_2 + cv::Point(cvRound(gradient_v2[0] * 10), cvRound(gradient_v2[1] * 10)));
-            const cv::Point end_3(pixel_coordinates_3 + cv::Point(cvRound(gradient_v3[0] * 10), cvRound(gradient_v3[1] * 10)));
-            const cv::Point end_4(pixel_coordinates_4 + cv::Point(cvRound(gradient_v4[0] * 10), cvRound(gradient_v4[1] * 10)));
-            
-            cv::arrowedLine(*output, pixel_coordinates_1, end_1, cv::Scalar(180, 180, 180), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_2, end_2, cv::Scalar(180, 180, 180), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_3, end_3, cv::Scalar(180, 180, 180), 1, 8, 0);
-            cv::arrowedLine(*output, pixel_coordinates_4, end_4, cv::Scalar(180, 180, 180), 1, 8, 0);
-        }
-    }
-
-    return dot_sum / total_steps;
-}

@@ -20,6 +20,7 @@ IGNORE_WARNINGS_POP
 
 #include "geometry_helpers.h"
 #include "color_model.h"
+#include "ellipse_functions.h"
 #include "ImageRegistration.h"
 
 using namespace mrpt;

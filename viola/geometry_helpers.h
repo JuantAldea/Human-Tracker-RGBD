@@ -11,15 +11,7 @@ IGNORE_WARNINGS_PUSH
 IGNORE_WARNINGS_POP
 
 
-cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int n_dims);
 
-inline cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int n_dims);
-
-inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const float squared_radi_x_inverse, const float squared_radi_y_inverse);
-
-inline Eigen::Vector2f calculate_ellipse_normal(const int axis_x, const int axis_y, const float angle);
-
-inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int axis_y, const float angle);
 ////////////////////
 
 inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float depth, const float inv_fx, const float inv_fy, const float cx, const float cy);
@@ -38,72 +30,6 @@ inline std::tuple<Eigen::Vector2i, Eigen::Vector2i> project_model(const Eigen::V
 std::tuple<Eigen::Vector2i, Eigen::Vector2i> project_model(const Eigen::Vector2f &model_center, const float depth, const Eigen::Vector2f &model_semi_axis_lengths,
     const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY);
 
-/////////////////////////////////
-/////////////////////////////////
-/////////////////////////////////
-
-inline bool point_within_ellipse(const cv::Point &point, const cv::Point &center, const float squared_radi_x_inverse, const float squared_radi_y_inverse)
-{
-    const int center_point_vector_x = point.x - center.x;
-    const int center_point_vector_y = point.y - center.y;
-    return ((center_point_vector_x * center_point_vector_x) * squared_radi_x_inverse + (center_point_vector_y * center_point_vector_y) * squared_radi_y_inverse) <= 1.0;
-}
-
-inline cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int n_dims)
-{
-    return create_ellipse_mask(cv::Point(rectangle.width / 2.f, rectangle.height / 2.f), rectangle.width, rectangle.height, n_dims);
-}
-
-cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int n_dims)
-{
-    cv::Mat mask;
-    mask.create(axis_y, axis_x, CV_8UC1);
-    const int rows = mask.rows;
-    const int cols = mask.cols;
-    const int n_rows_half = rows >> 1;
-    const int n_cols_half = cols >> 1;
-    const float radi_x = axis_x / 2.0;
-    const float radi_y = axis_y / 2.0;
-    const float squared_radi_x_inverse = 1.0 / float(radi_x * radi_x);
-    const float squared_radi_y_inverse = 1.0 / float(radi_y * radi_y);
-    const int cols_minus_1 = cols - 1;
-    //TODO USE_INTEL_TBB?
-    for (int i = 0; i < n_rows_half; i++) {
-        uchar* mask_row_upper = mask.ptr<uchar>(i);
-        uchar* mask_row_lower = mask.ptr<uchar>(rows - 1 - i);
-        for (int j = 0; j < n_cols_half; j++) {
-            const int point_within = point_within_ellipse(cv::Point(j, i), center, squared_radi_x_inverse, squared_radi_y_inverse) ? 0xff : 0x0;
-            mask_row_upper[j] = point_within;
-            mask_row_lower[j] = point_within;
-            const int right_side_j = cols_minus_1 - j;
-            mask_row_upper[right_side_j] = point_within;
-            mask_row_lower[right_side_j] = point_within;
-        }
-    }
-
-    std::vector<cv::Mat> mask_channels(n_dims, mask);
-    cv::Mat mask_ndims;
-    cv::merge(mask_channels, mask_ndims);
-
-    return mask_ndims;
-}
-
-inline Eigen::Vector2f calculate_ellipse_point(const cv::Point &center, const int axis_x, const int axis_y, const float angle)
-{
-    return Eigen::Vector2f(axis_x * cos(angle) + center.x, axis_y * sin(angle) + center.y);
-}
-
-inline Eigen::Vector2f calculate_ellipse_normal(const int axis_x, const int axis_y, const float angle)
-{
-    return Eigen::Vector2f(axis_x * cos(angle), axis_y * sin(angle));
-}
-
-inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int axis_y, const float angle)
-{
-    Eigen::Vector2f normal = calculate_ellipse_normal(axis_x, axis_y, angle);
-    normal.normalize();
-    return normal;
-}
 
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
@@ -216,8 +142,8 @@ cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const fl
         for (int y = 0; y < depth.cols; y++) {
             cv::Vec3f &v = p_reprojection[y];
             v[2] = p_depth[y];
-            v[1] = ((y - params.cy) * v[2]) * inv_fy;
-            v[0] = ((x - params.cx) * v[2]) * inv_fx;
+            v[1] = ((y - cy) * v[2]) * inv_fy;
+            v[0] = ((x - cx) * v[2]) * inv_fx;
         }
     }
 #endif

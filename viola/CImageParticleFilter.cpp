@@ -163,7 +163,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
                 if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
                    continue;
                 }
-                particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
+                particles_ellipse_fitting[i] = ellipse_contour_test(
                     cv::Point(m_particles[i].d->x, m_particles[i].d->y),
                     m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude);
 
@@ -189,7 +189,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
             continue;
         }
 
-        particles_ellipse_fitting[i] = ellipse_shape_gradient_test(
+        particles_ellipse_fitting[i] = ellipse_contour_test(
                     cv::Point(m_particles[i].d->x, m_particles[i].d->y),
                     m_particles[i].d->object_x_length_pixels * 0.5, m_particles[i].d->object_y_length_pixels * 0.5, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude);
     }

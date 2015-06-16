@@ -32,9 +32,12 @@ IGNORE_WARNINGS_POP
 #include "CImageParticleFilter.h"
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
+#include "ellipse_functions.h"
+
 #include "color_model.h"
 #include "faces_detection.h"
 #include "model_parameters.h"
+
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
@@ -53,11 +56,10 @@ libfreenect2::PacketPipeline *pipeline;
 
 void close_kinect2_handler(void)
 {
+    listener->waitForNewFrame(frames_kinect2);
+    listener->release(frames_kinect2);
     dev->stop();
     dev->close();
-    listener->release(frames_kinect2);
-    delete pipeline;
-    delete listener;
 }
 
 /*
@@ -240,6 +242,8 @@ int particle_filter()
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
 
+
+    /*
     struct sigaction sigIntHandler;
 
     sigIntHandler.sa_handler = [](int) {
@@ -248,7 +252,6 @@ int particle_filter()
         std::cout << "SIGINT2" << std::endl;
         exit(0);
     };
-
     sigemptyset(&sigIntHandler.sa_mask);
     sigIntHandler.sa_flags = 0;
     sigaction(SIGINT, &sigIntHandler, NULL);
@@ -256,7 +259,8 @@ int particle_filter()
     sigaction(SIGSEGV, &sigIntHandler, NULL);
 
     //atexit(close_kinect2_handler);
-    at_quick_exit(close_kinect2_handler);
+    //at_quick_exit(close_kinect2_handler);
+    */
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
@@ -274,8 +278,11 @@ int particle_filter()
     CDisplayWindow gradient_depth_window("gradient_depth_window");
     CDisplayWindow gradient_color_window("gradient_color_window");
 
+    CDisplayWindow model_histogram_window2("2model_histogram_window");
+    CDisplayWindow model_candidate_histogram_window2("2model_candidate_histogram_window");
+
     // -------------------3D view stuff------------------
-#define _3D
+//#define _3D
 #ifdef _3D
     CDisplayWindow3D win3D("Kinect 3D view", 640, 480);
 
@@ -329,9 +336,7 @@ int particle_filter()
     float x_global;
     float y_global;
     while (!mrpt::system::os::kbhit()) {
-        listener->release(frames_kinect2);
         listener->waitForNewFrame(frames_kinect2);
-
         libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
         libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
         //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
@@ -390,7 +395,16 @@ int particle_filter()
 
         if (init_model) {
             cv::Mat frame_hsv;
-            auto circles = viola_faces::detect_circles(color_frame);
+close_kinect2_handler();
+//return 0;
+            auto coso = [](){return std::vector<cv::Vec3f>(); };
+            std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
+                        /*for (uint i = 0; i < std::numeric_limits<uint>::max()/10.0; i++){
+                ;
+            }*/
+//            close_kinect2_handler();
+return 0;
+
             if (circles.size()) {
                 int circle_max = 0;
                 double radius_max = circles[0][2];
@@ -409,7 +423,7 @@ int particle_filter()
                 //int radius_2d = cvRound(circles[circle_max][2]);
                 
                 Eigen::Vector2i top_corner, bottom_corner;
-                
+                        
                 std::tie(top_corner, bottom_corner) = project_model(
                     Eigen::Vector2f(center.x, center.y), 
                     depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)), 
@@ -434,6 +448,8 @@ int particle_filter()
                 
                 cv::cvtColor(color_roi, hsv_roi, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(hsv_roi, mask);
+                
+
                 particles.update_color_model(model);
 
                 std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
@@ -460,7 +476,18 @@ int particle_filter()
                 model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
                 model_histogram_window.showImage(model_histogram_image);
                 //mrpt::system::os::getch();
+                {
+                    //const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
+                    //CImage model_histogram_image2;
+                    //model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
+                    //model_histogram_window2.showImage(model_histogram_image2);
+                    //cout << "SON IGUALES? " << model2.size() << ' ' << particles.color_model.size() << std::endl;
+                    //cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(particles.color_model.type()) << std::endl;
+                    //cout << "SON IGUALES? " << cv::norm(model2, particles.color_model) << std::endl;
+                    //exit(0);
+                }
             }
+
         } else {
             static CParticleFilter::TParticleFilterStats stats;
             PF.executeOn(particles, NULL, &observation, &stats);
@@ -506,20 +533,28 @@ int particle_filter()
                     //std::cout << "BHATTACHARYYA: " << score << std::endl;
                     
                     if (radius_x != 0 && radius_y != 0){
-                        float fitting_magnitude = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                        float fitting = ellipse_shape_gradient_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
+                        float fitting_magnitude = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                        float fitting = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
                         oss << "FITTING: " << fitting << "(" << fitting_magnitude << ") ";
                         //std::cout << "FITTING  SCORE " << fitting << std::endl;
                         //std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
                     }
 
+                    cv::Mat w_mask = create_ellipse_weight_mask(mask);
+                    cv::Scalar sum_w = cv::sum(w_mask);
+                    cv::Mat w_mask_img;
+                    cv::convertScaleAbs(w_mask, w_mask_img, 255.0);
+                    //w_mask_img = w_mask.clone() * 255;
+
                     CImage model_candidate;
-                    model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                    //model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                    model_candidate.loadFromIplImage(new IplImage(w_mask_img));
                     model_candidate_window.showImage(model_candidate);
                    
                     CImage model_candidate_histogram_image;
                     model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(model, 10)));
                     model_candidate_histogram_window.showImage(model_candidate_histogram_image);
+                    
                     
                     if (score > LIKEHOOD_FOUND){
                         cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
@@ -538,8 +573,8 @@ int particle_filter()
                     }
 
                     const cv::Point center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
-                    float fitting = ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                    float fitting_01 = ellipse_shape_gradient_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+                    float fitting = ellipse_contour_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                    float fitting_01 = ellipse_contour_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
                     oss << "FITTING CENTER: " << fitting_01 << " (" << fitting << ")";
                     {
                         int fontFace =  cv::FONT_HERSHEY_PLAIN;
@@ -563,6 +598,7 @@ int particle_filter()
                 */
             }
         }
+
         particles.last_time = cv::getTickCount();
 
         size_t N = particles.m_particles.size();
@@ -614,9 +650,11 @@ int particle_filter()
         win3D.unlockAccess3DScene();
         win3D.repaint();
 #endif
-        //mrpt::system::sleep(1);
-    }
 
+        //mrpt::system::sleep(1);
+        listener->release(frames_kinect2);
+    }
+    
     close_kinect2_handler();
     return 0;
 }

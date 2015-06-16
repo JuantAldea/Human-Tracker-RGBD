@@ -10,7 +10,8 @@ SET(CMAKE_CXX_STANDARD 11)
 
 SET(CMAKE_CXX_FLAGS_DEBUG "${viola_SOURCE_DIR} -ggdb3 -O0 -pg -std=c++11")
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} --fast-math -O3 -flto")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -flto -O3 -std=c++11")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=c++11 -pg")
+SET(CMAKE_EXE_LINKER_FLAGS "-pg")
 
 FIND_PACKAGE(PkgConfig QUIET)
 
@@ -18,11 +19,11 @@ FIND_PACKAGE(PkgConfig QUIET)
 
 SET(USE_KINECT_2 1)
 
-SET(USE_INTEL_TBB 1)
-if(${USE_INTEL_TBB})
-    SET(TBB_PARTITIONS 8)
-    PKG_CHECK_MODULES(TBB tbb)
-endif()
+#SET(USE_INTEL_TBB 1)
+#IF(${USE_INTEL_TBB})
+#    SET(TBB_PARTITIONS 8)
+#    PKG_CHECK_MODULES(TBB tbb)
+#ENDIF()
 
 CONFIGURE_FILE(project_config.h.in project_config.h)
 
@@ -59,6 +60,7 @@ ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 ADD_LIBRARY(ImageRegistration SHARED ImageRegistration.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
+ADD_EXECUTABLE(debug_pf debug_pf.cpp)
 ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 ADD_EXECUTABLE(calibration_pairs calibration_pairs.cpp)
 ADD_EXECUTABLE(image_registration_example image_registration_example.cpp)
@@ -84,13 +86,25 @@ TARGET_LINK_LIBRARIES(particle_filter_main
      KinectCamera
      ${MRPT_LIBS} 
      ${OpenCV_LIBS} 
-     ${TBB_LIBRARIES} 
+     #${TBB_LIBRARIES} 
      ${freenect2_LIBRARY}
      ${OpenCL_LIBRARIES}
      ${DEPTH_REGISTRATION_LIBRARY}
      ImageRegistration
 )
 
+TARGET_LINK_LIBRARIES(debug_pf
+     ImageParticleFilter
+     FacesDetection
+     KinectCamera
+     ${MRPT_LIBS} 
+     ${OpenCV_LIBS} 
+     #${TBB_LIBRARIES} 
+     ${freenect2_LIBRARY}
+     ${OpenCL_LIBRARIES}
+     ${DEPTH_REGISTRATION_LIBRARY}
+     ImageRegistration
+)
 
 TARGET_LINK_LIBRARIES(image_registration_example
     ${OpenCV_LIBS}
