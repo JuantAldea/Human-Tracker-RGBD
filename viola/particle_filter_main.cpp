@@ -53,7 +53,9 @@ libfreenect2::Freenect2 freenect2;
 libfreenect2::SyncMultiFrameListener *listener;
 libfreenect2::FrameMap frames_kinect2;
 libfreenect2::PacketPipeline *pipeline;
-
+#ifdef USE_INTEL_TBB
+tbb::task_scheduler_init *tbb_init;
+#endif
 void close_kinect2_handler(void)
 {
     listener->waitForNewFrame(frames_kinect2);
@@ -80,7 +82,6 @@ void dispDepth(const cv::Mat &in, cv::Mat &out, const float maxValue)
     cv::Mat tmp = cv::Mat(in.rows, in.cols, CV_8U);
     const uint32_t maxInt = 255;
 
-    #pragma omp parallel for
     for (int r = 0; r < in.rows; ++r) {
         const uint16_t *itI = in.ptr<uint16_t>(r);
         uint8_t *itO = tmp.ptr<uint8_t>(r);
@@ -201,7 +202,7 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale,
 }
 
 
-int particle_filter()
+int particle_filter2()
 {
     if (freenect2.enumerateDevices() == 0) {
         std::cout << "no device connected!" << std::endl;
@@ -212,9 +213,6 @@ int particle_filter()
 
     char *calib_dir = getenv("HOME");
     std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
-
-    ImageRegistration reg;
-    reg.init(calib_path, serial);
 
     pipeline = new libfreenect2::OpenCLPacketPipeline();
 
@@ -242,6 +240,9 @@ int particle_filter()
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
 
+    ImageRegistration reg;
+    reg.init(calib_path, serial);
+
 
     /*
     struct sigaction sigIntHandler;
@@ -257,10 +258,10 @@ int particle_filter()
     sigaction(SIGINT, &sigIntHandler, NULL);
     sigaction(SIGQUIT, &sigIntHandler, NULL);
     sigaction(SIGSEGV, &sigIntHandler, NULL);
-
+    */
     //atexit(close_kinect2_handler);
     //at_quick_exit(close_kinect2_handler);
-    */
+    
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
@@ -268,6 +269,7 @@ int particle_filter()
     cv::Mat depth_frame;
 
     randomGenerator.randomize();
+    /*
     CDisplayWindow image("image");
 
     CDisplayWindow model_image_window("model-image");
@@ -280,8 +282,10 @@ int particle_filter()
 
     CDisplayWindow model_histogram_window2("2model_histogram_window");
     CDisplayWindow model_candidate_histogram_window2("2model_candidate_histogram_window");
+    */
 
     // -------------------3D view stuff------------------
+
 //#define _3D
 #ifdef _3D
     CDisplayWindow3D win3D("Kinect 3D view", 640, 480);
@@ -342,8 +346,8 @@ int particle_filter()
         //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
 
 
-        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
-        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
+        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data).clone();
+        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data).clone();
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
 
         cv::Mat registered_depth;
@@ -359,7 +363,7 @@ int particle_filter()
         
         CImage registered_depth_image;
         registered_depth_image.loadFromIplImage(new IplImage(combined));
-        registered_color_window.showImage(registered_depth_image);
+        //registered_color_window.showImage(registered_depth_image);
         
         color_frame = color_mat;
         depth_frame = registered_depth;
@@ -395,16 +399,24 @@ int particle_filter()
 
         if (init_model) {
             cv::Mat frame_hsv;
-close_kinect2_handler();
-//return 0;
-            auto coso = [](){return std::vector<cv::Vec3f>(); };
-            std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
-                        /*for (uint i = 0; i < std::numeric_limits<uint>::max()/10.0; i++){
-                ;
-            }*/
-//            close_kinect2_handler();
-return 0;
 
+            //auto coso = [](){return std::vector<cv::Vec3f>(); };
+            //std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
+            //std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
+            //std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame);
+            viola_faces::detect_faces(cv::Mat::ones(1, 1, CV_8UC3));
+            std::vector<viola_faces::face> caras;
+            std::vector<cv::Vec3f> circles;
+            for (auto &cara : caras){
+                circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
+            }
+
+            //tbb_init->terminate();
+{
+    dev->stop();
+    dev->close();
+    return 0;
+}
             if (circles.size()) {
                 int circle_max = 0;
                 double radius_max = circles[0][2];
@@ -471,10 +483,10 @@ return 0;
 
                 CImage model_frame;
                 model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-                model_image_window.showImage(model_frame);
+                //model_image_window.showImage(model_frame);
                 CImage model_histogram_image;
                 model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
-                model_histogram_window.showImage(model_histogram_image);
+                //model_histogram_window.showImage(model_histogram_image);
                 //mrpt::system::os::getch();
                 {
                     //const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
@@ -549,11 +561,11 @@ return 0;
                     CImage model_candidate;
                     //model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
                     model_candidate.loadFromIplImage(new IplImage(w_mask_img));
-                    model_candidate_window.showImage(model_candidate);
+                    //model_candidate_window.showImage(model_candidate);
                    
                     CImage model_candidate_histogram_image;
                     model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(model, 10)));
-                    model_candidate_histogram_window.showImage(model_candidate_histogram_image);
+                    //model_candidate_histogram_window.showImage(model_candidate_histogram_image);
                     
                     
                     if (score > LIKEHOOD_FOUND){
@@ -568,7 +580,7 @@ return 0;
                         std::cout << "MEAN UPDATING MODEL" << std::endl;
                         CImage model_frame;
                         model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-                        model_image_window.showImage(model_frame);
+                        //model_image_window.showImage(model_frame);
                         particles.update_color_model(model);
                     }
 
@@ -615,11 +627,11 @@ return 0;
         
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
-        gradient_color_window.showImage(gradient_magnitude_image);
+        //gradient_color_window.showImage(gradient_magnitude_image);
         
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
-        image.showImage(frame_particles);
+        //image.showImage(frame_particles);
 
 #ifdef _3D
 
@@ -655,7 +667,10 @@ return 0;
         listener->release(frames_kinect2);
     }
     
-    close_kinect2_handler();
+    listener->waitForNewFrame(frames_kinect2);
+    listener->release(frames_kinect2);
+    dev->stop();
+    dev->close();
     return 0;
 }
 
@@ -681,7 +696,17 @@ int main(int argc, char *argv[])
     }
 
     std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " TRANSITION_MODEL_STD_XY: " << TRANSITION_MODEL_STD_XY << " TRANSITION_MODEL_STD_VXY: " << TRANSITION_MODEL_STD_VXY << std::endl;
-    particle_filter();
+    /*
+    #ifdef USE_INTEL_TBB
+    tbb_init = new tbb::task_scheduler_init();
+    #endif
+    */
+    particle_filter2();
+    /*
+    #ifdef USE_INTEL_TBB
+    tbb_init->terminate();
+    #endif 
+    */
 
     return 0;
 

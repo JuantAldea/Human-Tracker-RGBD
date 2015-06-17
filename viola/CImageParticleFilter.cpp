@@ -141,7 +141,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
         if (i == 0){
             particle_image.loadFromIplImage(new IplImage(particle_roi_img));
-            particle_window.showImage(particle_image);
+            //particle_window.showImage(particle_image);
             //std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
             //std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
             //std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;

@@ -72,7 +72,7 @@ DepthRegistrationOpenCL::DepthRegistrationOpenCL()
 
 DepthRegistrationOpenCL::~DepthRegistrationOpenCL()
 {
-  delete data;
+  //delete data;
 }
 
 void getDevices(const std::vector<cl::Platform> &platforms, std::vector<cl::Device> &devices)

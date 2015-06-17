@@ -120,23 +120,8 @@ template<typename DEPTH_TYPE>
 cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
     cv::Mat reprojection = cv::Mat(depth.size(), depth.type());
-#ifdef USE_INTEL_TBB
-    tbb::parallel_for(tbb::blocked_range<int>(0, depth.rows, depth.rows / TBB_PARTITIONS),
-        [&](const tbb::blocked_range<int> &r){
-            for (int x = r.begin(); x < r.end(); x++) {
-                const DEPTH_TYPE *p_depth = depth.ptr<DEPTH_TYPE>(x);
-                cv::Vec3f *p_reprojection = reprojection.ptr<cv::Vec3f>(x);
-                for (int y = 0; y < depth.cols; y++) {
-                    cv::Vec3f &v = p_reprojection[y];
-                    v[2] = p_depth[y];
-                    v[1] = ((y - cy) * v[2]) * inv_fy;
-                    v[0] = ((x - cx) * v[2]) * inv_fx;
-                }
-            }
-        }
-    );
-#else
-    for (int x = 0; x < depth.rows; x++) {
+    
+    auto depth_3D_reprojection_lambda = [&](const int x){
         const DEPTH_TYPE *p_depth = depth.ptr<DEPTH_TYPE>(x);
         cv::Vec3f *p_reprojection = reprojection.ptr<cv::Vec3f>(x);
         for (int y = 0; y < depth.cols; y++) {
@@ -145,11 +130,23 @@ cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const fl
             v[1] = ((y - cy) * v[2]) * inv_fy;
             v[0] = ((x - cx) * v[2]) * inv_fx;
         }
+    };
+
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<int>(0, depth.rows, depth.rows / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<int> &r){
+            for (int x = r.begin(); x < r.end(); x++) {
+                depth_3D_reprojection_lambda(x);
+            }
+        }
+    );
+#else
+    for (int x = 0; x < depth.rows; x++) {
+        depth_3D_reprojection_lambda(x);
     }
 #endif
     return reprojection;
 }
-
 
 
   ////////////////////////////////
