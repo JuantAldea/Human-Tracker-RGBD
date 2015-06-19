@@ -54,10 +54,10 @@ class CImageParticleFilter :
     public mrpt::bayes::CParticleFilterDataImpl <CImageParticleFilter<DEPTH_TYPE>,
         mrpt::bayes::CParticleFilterData<CImageParticleData>::CParticleList>
 {
-    
+
 public:
     void update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation);
-    
+
     void weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation);
 
     void prediction_and_update_pfStandardProposal(
@@ -81,7 +81,7 @@ public:
     void print_particle_state(void) const;
 
     int64_t last_time;
-    //CDisplayWindow particle_window;
+    CDisplayWindow particle_window;
     CImage particle_image;
     cv::Mat color_model;
 

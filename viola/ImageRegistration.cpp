@@ -11,7 +11,7 @@ ImageRegistration::ImageRegistration() :
 
 ImageRegistration::~ImageRegistration()
 {
-    //delete depthRegHighRes;
+    delete depthRegHighRes;
 }
 
 void ImageRegistration::init(const std::string &calib_path, const std::string &sensor)
@@ -45,13 +45,13 @@ void ImageRegistration::initCalibration(const std::string &calib_path, const std
     }
 
     depthRegHighRes->init(cameraMatrixColor, sizeColor, cameraMatrixIr, sizeIr, distortionIr, rotation, translation, 0.5f, maxDepth, -1);
-    
+
     const int mapType = CV_16SC2;
     cv::initUndistortRectifyMap(cameraMatrixColor, distortionColor, cv::Mat(), cameraMatrixColor, sizeColor, mapType, map1Color, map2Color);
     cv::initUndistortRectifyMap(cameraMatrixIr, distortionIr, cv::Mat(), cameraMatrixIr, sizeIr, mapType, map1Ir, map2Ir);
-    
+
     createLookup();
-    
+
     std::cout << std::endl
               << "Camera parameters:" << std::endl
               << "camera matrix color:" << std::endl << cameraMatrixColor << std::endl

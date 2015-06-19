@@ -1,6 +1,6 @@
 #include <signal.h>
 #include <cstdlib>
-
+#include <string>
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
@@ -53,9 +53,7 @@ libfreenect2::Freenect2 freenect2;
 libfreenect2::SyncMultiFrameListener *listener;
 libfreenect2::FrameMap frames_kinect2;
 libfreenect2::PacketPipeline *pipeline;
-#ifdef USE_INTEL_TBB
-tbb::task_scheduler_init *tbb_init;
-#endif
+
 void close_kinect2_handler(void)
 {
     listener->waitForNewFrame(frames_kinect2);
@@ -82,6 +80,7 @@ void dispDepth(const cv::Mat &in, cv::Mat &out, const float maxValue)
     cv::Mat tmp = cv::Mat(in.rows, in.cols, CV_8U);
     const uint32_t maxInt = 255;
 
+    #pragma omp parallel for
     for (int r = 0; r < in.rows; ++r) {
         const uint16_t *itI = in.ptr<uint16_t>(r);
         uint8_t *itO = tmp.ptr<uint8_t>(r);
@@ -98,7 +97,7 @@ void combine(const cv::Mat &inC, const cv::Mat &inD, cv::Mat &out)
 {
     out = cv::Mat(inC.rows, inC.cols, CV_8UC3);
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int r = 0; r < inC.rows; ++r) {
         const cv::Vec3b
         *itC = inC.ptr<cv::Vec3b>(r),
@@ -202,8 +201,24 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale,
 }
 
 
-int particle_filter2()
+int particle_filter()
 {
+    string face_cascade_name = "../cascades/lbpcascade_frontalface.xml";
+    string eyes_cascade_name = "../cascades/haarcascade_eye_tree_eyeglasses.xml";
+    cv::CascadeClassifier face_cascade;
+    cv::CascadeClassifier eyes_cascade;
+
+    if (!face_cascade.load(face_cascade_name)) {
+        printf("--(!)Error loading\n");
+        return -1;
+    }
+
+    if (!eyes_cascade.load(eyes_cascade_name)) {
+        printf("--(!)Error loading\n");
+        return -1;
+    }
+
+
     if (freenect2.enumerateDevices() == 0) {
         std::cout << "no device connected!" << std::endl;
         return -1;
@@ -239,7 +254,6 @@ int particle_filter2()
     dev->setColorFrameListener(listener);
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
-
     ImageRegistration reg;
     reg.init(calib_path, serial);
 
@@ -261,7 +275,6 @@ int particle_filter2()
     */
     //atexit(close_kinect2_handler);
     //at_quick_exit(close_kinect2_handler);
-    
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
@@ -269,7 +282,7 @@ int particle_filter2()
     cv::Mat depth_frame;
 
     randomGenerator.randomize();
-    /*
+
     CDisplayWindow image("image");
 
     CDisplayWindow model_image_window("model-image");
@@ -282,7 +295,6 @@ int particle_filter2()
 
     CDisplayWindow model_histogram_window2("2model_histogram_window");
     CDisplayWindow model_candidate_histogram_window2("2model_candidate_histogram_window");
-    */
 
     // -------------------3D view stuff------------------
 
@@ -330,7 +342,7 @@ int particle_filter2()
 
     CParticleFilter PF;
     PF.m_options = PF_options;
-    
+
     using DEPTH_TYPE = uint16_t;
     CImageParticleFilter<DEPTH_TYPE> particles;
 
@@ -346,8 +358,8 @@ int particle_filter2()
         //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
 
 
-        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data).clone();
-        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data).clone();
+        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
+        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
 
         cv::Mat registered_depth;
@@ -360,11 +372,11 @@ int particle_filter2()
         combine(color_mat, depthDisp, combined);
         cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
-        
+
         CImage registered_depth_image;
         registered_depth_image.loadFromIplImage(new IplImage(combined));
-        //registered_color_window.showImage(registered_depth_image);
-        
+        registered_color_window.showImage(registered_depth_image);
+
         color_frame = color_mat;
         depth_frame = registered_depth;
         color_display_frame = color_mat.clone();
@@ -381,10 +393,10 @@ int particle_filter2()
         CSensoryFrame observation;
         observation.insert(obsImage_color);
         observation.insert(obsImage_depth);
-        
+
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
-        
+
         /*
         double min, max;
         cv::minMaxLoc(depth_frame, &min, &max);
@@ -395,28 +407,19 @@ int particle_filter2()
         CImage gradient_depth_image;
         gradient_depth_image.loadFromIplImage(new IplImage(gradient_depth));
         gradient_depth_window.showImage(gradient_depth_image);
-        */        
+        */
 
         if (init_model) {
             cv::Mat frame_hsv;
+            std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
 
-            //auto coso = [](){return std::vector<cv::Vec3f>(); };
-            //std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
-            //std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
-            //std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame);
-            viola_faces::detect_faces(cv::Mat::ones(1, 1, CV_8UC3));
-            std::vector<viola_faces::face> caras;
-            std::vector<cv::Vec3f> circles;
+            /*
+            std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame);
             for (auto &cara : caras){
                 circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
             }
+            */
 
-            //tbb_init->terminate();
-{
-    dev->stop();
-    dev->close();
-    return 0;
-}
             if (circles.size()) {
                 int circle_max = 0;
                 double radius_max = circles[0][2];
@@ -433,15 +436,15 @@ int particle_filter2()
 
                 cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
                 //int radius_2d = cvRound(circles[circle_max][2]);
-                
+
                 Eigen::Vector2i top_corner, bottom_corner;
-                        
+
                 std::tie(top_corner, bottom_corner) = project_model(
-                    Eigen::Vector2f(center.x, center.y), 
-                    depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)), 
+                    Eigen::Vector2f(center.x, center.y),
+                    depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)),
                     Eigen::Vector2f(0.06, 0.06),
                     reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-                
+
                 float x_radius = (bottom_corner - top_corner)[0] * 0.5;
                 float y_radius = (bottom_corner - top_corner)[1] * 0.5;
                 x_radius_global = x_radius;
@@ -457,15 +460,15 @@ int particle_filter2()
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
                 cv::Mat color_roi = color_frame(model_roi);
                 cv::Mat hsv_roi;
-                
+
                 cv::cvtColor(color_roi, hsv_roi, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(hsv_roi, mask);
-                
+
 
                 particles.update_color_model(model);
 
                 std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
-                particles.initializeParticles(NUM_PARTICLES, 
+                particles.initializeParticles(NUM_PARTICLES,
                     make_pair(center.x, x_radius * PERCENTAGE), make_pair(center.y, y_radius * PERCENTAGE), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
                     //make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(0, 250.f),
                     //make_pair(center.x, 0), make_pair(center.y, 0), make_pair(0, 25),
@@ -483,20 +486,23 @@ int particle_filter2()
 
                 CImage model_frame;
                 model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-                //model_image_window.showImage(model_frame);
+                model_image_window.showImage(model_frame);
                 CImage model_histogram_image;
                 model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
-                //model_histogram_window.showImage(model_histogram_image);
+                model_histogram_window.showImage(model_histogram_image);
                 //mrpt::system::os::getch();
+
                 {
-                    //const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
-                    //CImage model_histogram_image2;
-                    //model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
-                    //model_histogram_window2.showImage(model_histogram_image2);
-                    //cout << "SON IGUALES? " << model2.size() << ' ' << particles.color_model.size() << std::endl;
-                    //cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(particles.color_model.type()) << std::endl;
-                    //cout << "SON IGUALES? " << cv::norm(model2, particles.color_model) << std::endl;
-                    //exit(0);
+                    /*
+                    const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
+                    CImage model_histogram_image2;
+                    model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
+                    model_histogram_window2.showImage(model_histogram_image2);
+                    cout << "SON IGUALES? " << model2.size() << ' ' << particles.color_model.size() << std::endl;
+                    cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(particles.color_model.type()) << std::endl;
+                    cout << "SON IGUALES? " << cv::norm(model2, particles.color_model) << std::endl;
+                    exit(0);
+                    */
                 }
             }
 
@@ -513,7 +519,7 @@ int particle_filter2()
             cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
 
             std::cout << "MEAN " << mean_weight << " " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
-            
+
             {
                 Eigen::Vector2i top_corner, bottom_corner;
                 std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y),
@@ -525,7 +531,7 @@ int particle_filter2()
                 const int radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
                 const int radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
                 const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
- 
+
                 // test whether the estimated roi lies inside of the image frame or not
                 const cv::Rect rectangle_image = cv::Rect(cv::Point(0, 0), color_frame.size());
                 const cv::Rect rectangle_image_roi_intersection = rectangle_image & model_roi;
@@ -543,7 +549,7 @@ int particle_filter2()
                     oss << "BHATTACHARYYA: " << score << " ";
 
                     //std::cout << "BHATTACHARYYA: " << score << std::endl;
-                    
+
                     if (radius_x != 0 && radius_y != 0){
                         float fitting_magnitude = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
                         float fitting = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
@@ -561,17 +567,17 @@ int particle_filter2()
                     CImage model_candidate;
                     //model_candidate.loadFromIplImage(new IplImage(color_frame(model_roi)));
                     model_candidate.loadFromIplImage(new IplImage(w_mask_img));
-                    //model_candidate_window.showImage(model_candidate);
-                   
+                    model_candidate_window.showImage(model_candidate);
+
                     CImage model_candidate_histogram_image;
                     model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(model, 10)));
-                    //model_candidate_histogram_window.showImage(model_candidate_histogram_image);
-                    
-                    
+                    model_candidate_histogram_window.showImage(model_candidate_histogram_image);
+
+
                     if (score > LIKEHOOD_FOUND){
                         cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                         cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
-                        
+
                         //cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
                         //cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
                     }
@@ -580,7 +586,7 @@ int particle_filter2()
                         std::cout << "MEAN UPDATING MODEL" << std::endl;
                         CImage model_frame;
                         model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-                        //model_image_window.showImage(model_frame);
+                        model_image_window.showImage(model_frame);
                         particles.update_color_model(model);
                     }
 
@@ -600,10 +606,10 @@ int particle_filter2()
                         putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
                     }
                 }
-                
-                
+
+
                 /*
-                particles.initializeParticles(NUM_PARTICLES, 
+                particles.initializeParticles(NUM_PARTICLES,
                     make_pair(avrg_x, x_radius), make_pair(avrg_y, y_radius), make_pair(float(depth_frame.at<uint16_t>(cvRound(avrg_y), cvRound(avrg_x))), 1000.f),
                     make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
                     make_pair(0.12, 0.12), reg);
@@ -614,34 +620,34 @@ int particle_filter2()
         particles.last_time = cv::getTickCount();
 
         size_t N = particles.m_particles.size();
-        
+
 
         for (size_t i = 0; i < N; i++) {
             cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
                                               particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
         }
-        
+
         cv::line(color_display_frame, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
 
-        
+
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
-        //gradient_color_window.showImage(gradient_magnitude_image);
-        
+        gradient_color_window.showImage(gradient_magnitude_image);
+
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_display_frame));
-        //image.showImage(frame_particles);
+        image.showImage(frame_particles);
 
 #ifdef _3D
 
         //--- 3D view stuff
         create_cloud(color_frame, depth_frame, 1.0/1000.0f, reg, scene_points_map);
-        
+
         //std::vector<Eigen::Vector2f> particle_vectors(N);
         std::vector<Eigen::Vector3f> particle_vectors3d(N);
         std::vector<Eigen::Vector3f> particle_vectors3d_2(N);
-        
+
         for (size_t i = 0; i < N; i++) {
             //particle_vectors[i] = Eigen::Vector2f(particles.m_particles[i].d->x, particles.m_particles[i].d->y);
             particle_vectors3d_2[i] = Eigen::Vector3f(particles.m_particles[i].d->x, particles.m_particles[i].d->y, particles.m_particles[i].d->z);
@@ -666,7 +672,7 @@ int particle_filter2()
         //mrpt::system::sleep(1);
         listener->release(frames_kinect2);
     }
-    
+
     listener->waitForNewFrame(frames_kinect2);
     listener->release(frames_kinect2);
     dev->stop();
@@ -696,17 +702,9 @@ int main(int argc, char *argv[])
     }
 
     std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " TRANSITION_MODEL_STD_XY: " << TRANSITION_MODEL_STD_XY << " TRANSITION_MODEL_STD_VXY: " << TRANSITION_MODEL_STD_VXY << std::endl;
-    /*
-    #ifdef USE_INTEL_TBB
-    tbb_init = new tbb::task_scheduler_init();
-    #endif
-    */
-    particle_filter2();
-    /*
-    #ifdef USE_INTEL_TBB
-    tbb_init->terminate();
-    #endif 
-    */
+
+
+    particle_filter();
 
     return 0;
 

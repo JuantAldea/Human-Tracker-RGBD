@@ -30,13 +30,11 @@ CONFIGURE_FILE(project_config.h.in project_config.h)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 
 #################
-#[[
 find_package(OpenMP)
 
 if(OPENMP_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
-]]
 
 INCLUDE(depth_registration)
 INCLUDE_DIRECTORIES(${DEPTH_REGISTRATION_INCLUDE_DIR})
@@ -62,7 +60,7 @@ ADD_LIBRARY(FacesDetection SHARED faces_detection.cpp)
 ADD_LIBRARY(ImageRegistration SHARED ImageRegistration.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
-#ADD_EXECUTABLE(debug_pf debug_pf.cpp)
+
 #ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 #ADD_EXECUTABLE(calibration_pairs calibration_pairs.cpp)
 #ADD_EXECUTABLE(image_registration_example image_registration_example.cpp)
@@ -85,29 +83,16 @@ TARGET_LINK_LIBRARIES(ImageRegistration
 TARGET_LINK_LIBRARIES(particle_filter_main
      ImageParticleFilter
      FacesDetection
-     #KinectCamera
-     ${MRPT_LIBS} 
-     ${OpenCV_LIBS} 
-     #${TBB_LIBRARIES} 
-     ${freenect2_LIBRARY}
-     ${OpenCL_LIBRARIES}
-     ${DEPTH_REGISTRATION_LIBRARY}
-     ImageRegistration
-)
-#[[
-TARGET_LINK_LIBRARIES(debug_pf
-     ImageParticleFilter
-     FacesDetection
-     KinectCamera
-     ${MRPT_LIBS} 
-     ${OpenCV_LIBS} 
-     #${TBB_LIBRARIES} 
+     ${MRPT_LIBS}
+     ${OpenCV_LIBS}
+     ${TBB_LIBRARIES}
      ${freenect2_LIBRARY}
      ${OpenCL_LIBRARIES}
      ${DEPTH_REGISTRATION_LIBRARY}
      ImageRegistration
 )
 
+#[[
 TARGET_LINK_LIBRARIES(image_registration_example
     ${OpenCV_LIBS}
     ${OpenCL_LIBRARIES}

@@ -21,7 +21,7 @@ void print_faces(const faces &detected_faces, Mat &frame, float scale_width, flo
     }
 }
 
-faces detect_faces(const Mat &frame)
+faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade)
 {
     Mat frame_gray;
 
@@ -47,12 +47,10 @@ std::vector<cv::Vec3f> detect_circles(const cv::Mat &image)
 {
     using namespace cv;
     vector<Vec3f> circles;
-    /*
     Mat src_gray;
     cvtColor(image, src_gray, CV_BGR2GRAY);
     GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
     HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 50, 0);
-    */
     return circles;
 }
 
