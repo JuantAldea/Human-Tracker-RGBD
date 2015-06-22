@@ -112,53 +112,6 @@ void combine(const cv::Mat &inC, const cv::Mat &inD, cv::Mat &out)
     }
 }
 
-/*
-inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const float x, const float y, const float z, const double inv_fx, const double inv_fy, const float cx, const float cy)
-{
-    return Eigen::Vector3f((x - cx) * z * inv_fx, (y - cy) * z * inv_fy, z);
-}
-
-inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const float x, const float y, const float z, const cv::Mat &cameraMatrix)
-{
-    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
-    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
-    const float cx = cameraMatrix.at<double>(0, 2);
-    const float cy = cameraMatrix.at<double>(1, 2);
-    return pixel_depth_to_3D_coordiantes(x, y, z, inv_fx, inv_fy, cx, cy);
-}
-
-inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const Eigen::Vector3f &v, const cv::Mat &cameraMatrix)
-{
-    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
-    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
-    const float cx = cameraMatrix.at<double>(0, 2);
-    const float cy = cameraMatrix.at<double>(1, 2);
-    return pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
-}
-
-vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(vector<Eigen::Vector3f> xyd_vectors, const double inv_fx, const double inv_fy, const double cx, const double cy)
-{
-    const size_t N = xyd_vectors.size();
-    vector<Eigen::Vector3f> coordinates_3D(N);
-    //TODO TBB
-    for (size_t i = 0; i < N; i++){
-        const Eigen::Vector3f &v = xyd_vectors[i];
-        coordinates_3D[i] = pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
-    }
-
-    return coordinates_3D;
-}
-
-inline vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(vector<Eigen::Vector3f> xyd_vectors, const cv::Mat &cameraMatrix)
-{
-    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
-    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
-    const float cx = cameraMatrix.at<double>(0, 2);
-    const float cy = cameraMatrix.at<double>(1, 2);
-    return pixel_depth_to_3D_coordiantes(xyd_vectors, inv_fx, inv_fy, cx, cy);
-}
-*/
-
 void create_cloud(const std::vector<Eigen::Vector3f> &points, const float scale, CColouredPointsMap &cloud)
 {
     cloud.clear();
@@ -463,6 +416,18 @@ int particle_filter()
 
                 cv::cvtColor(color_roi, hsv_roi, cv::COLOR_BGR2HSV);
                 const cv::Mat model = compute_color_model(hsv_roi, mask);
+                {
+                    
+                    const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
+                    //CImage model_histogram_image2;
+                    //model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
+                    //model_histogram_window2.showImage(model_histogram_image2);
+                    cout << "SON IGUALES? " << model2.size() << ' ' << model.size() << std::endl;
+                    cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(model.type()) << std::endl;
+                    cout << "SON IGUALES? " << cv::norm(model2, model) << std::endl;
+                    exit(0);
+                    
+                }
 
 
                 particles.update_color_model(model);
@@ -492,18 +457,6 @@ int particle_filter()
                 model_histogram_window.showImage(model_histogram_image);
                 //mrpt::system::os::getch();
 
-                {
-                    /*
-                    const cv::Mat model2 = compute_color_model2(hsv_roi, mask);
-                    CImage model_histogram_image2;
-                    model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
-                    model_histogram_window2.showImage(model_histogram_image2);
-                    cout << "SON IGUALES? " << model2.size() << ' ' << particles.color_model.size() << std::endl;
-                    cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(particles.color_model.type()) << std::endl;
-                    cout << "SON IGUALES? " << cv::norm(model2, particles.color_model) << std::endl;
-                    exit(0);
-                    */
-                }
             }
 
         } else {
@@ -551,14 +504,15 @@ int particle_filter()
                     //std::cout << "BHATTACHARYYA: " << score << std::endl;
 
                     if (radius_x != 0 && radius_y != 0){
-                        float fitting_magnitude = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                        float fitting = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
-                        oss << "FITTING: " << fitting << "(" << fitting_magnitude << ") ";
+                        //float fitting_magnitude = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                        //float fitting = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &color_display_frame);
+                        //oss << "FITTING: " << fitting << "(" << fitting_magnitude << ") ";
                         //std::cout << "FITTING  SCORE " << fitting << std::endl;
                         //std::cout << "RADIUS " << radius_x << ' ' << radius_y << std::endl;
                     }
 
-                    cv::Mat w_mask = create_ellipse_weight_mask(mask);
+                    //cv::Mat w_mask = create_ellipse_weight_mask(mask);
+                    cv::Mat w_mask = create_ellipse_mask(cv::Rect(0, 0, 100, 200), 1);
                     cv::Scalar sum_w = cv::sum(w_mask);
                     cv::Mat w_mask_img;
                     cv::convertScaleAbs(w_mask, w_mask_img, 255.0);
@@ -591,7 +545,9 @@ int particle_filter()
                     }
 
                     const cv::Point center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
+                    /*
                     float fitting = ellipse_contour_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+                    
                     float fitting_01 = ellipse_contour_test(center, x_radius_global, y_radius_global, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
                     oss << "FITTING CENTER: " << fitting_01 << " (" << fitting << ")";
                     {
@@ -605,6 +561,7 @@ int particle_filter()
                         //cv::Point textOrg(textSize.width, textSize.height);
                         putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
                     }
+                    */
                 }
 
 

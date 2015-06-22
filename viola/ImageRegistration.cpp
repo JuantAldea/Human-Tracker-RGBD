@@ -11,7 +11,7 @@ ImageRegistration::ImageRegistration() :
 
 ImageRegistration::~ImageRegistration()
 {
-    delete depthRegHighRes;
+    //delete depthRegHighRes;
 }
 
 void ImageRegistration::init(const std::string &calib_path, const std::string &sensor)

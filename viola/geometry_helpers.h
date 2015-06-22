@@ -72,16 +72,29 @@ inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const Eigen::Vector3f &v, c
     return pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
 }
 
-std::vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(const std::vector<Eigen::Vector3f> &xyd_vectors, const double inv_fx, const double inv_fy, const double cx, const double cy)
+inline std::vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(const std::vector<Eigen::Vector3f> &xyd_vectors, const double inv_fx, const double inv_fy, const double cx, const double cy)
 {
     const size_t N = xyd_vectors.size();
     std::vector<Eigen::Vector3f> coordinates_3D(N);
-    //TODO TBB
-    for (size_t i = 0; i < N; i++){
+    
+    auto loop_body_lambda = [&](const int i){
         const Eigen::Vector3f &v = xyd_vectors[i];
         coordinates_3D[i] = pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
-    }
+    };
 
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<size_t> &r){
+            for (size_t i = r.begin(); i < r.end(); i++) {
+                loop_body_lambda(i);
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++) {
+        loop_body_lambda(i);
+    }
+#endif
     return coordinates_3D;
 }
 
@@ -92,28 +105,6 @@ inline std::vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(const std::vec
     const float cx = cameraMatrix.at<double>(0, 2);
     const float cy = cameraMatrix.at<double>(1, 2);
     return pixel_depth_to_3D_coordiantes(xyd_vectors, inv_fx, inv_fy, cx, cy);
-}
-
-
-template<typename DEPTH_TYPE>
-std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
-{
-    const size_t N = points.size();
-    std::vector<Eigen::Vector3f> reprojected_points(N);
-#ifdef USE_INTEL_TBB
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
-        [&](const tbb::blocked_range<size_t> &r) {
-            for (size_t i = r.begin(); i != r.end(); i++) {
-                reprojected_points[i] = pixel_depth_to_3D_coordiantes(points[i], depth.at<DEPTH_TYPE>(points[i][1], points[i][0]), inv_fx, inv_fy, cx, cy);
-            }
-        }
-    );
-#else
-    for (size_t i = 0; i < N; i++){
-        reprojected_points[i] = pixel_depth_to_3D_coordiantes(points[i], depth.at<DEPTH_TYPE>(points[i][1], points[i][0]), inv_fx, inv_fy, cx, cy);
-    }
-#endif
-    return reprojected_points;
 }
 
 template<typename DEPTH_TYPE>
@@ -177,6 +168,28 @@ inline Eigen::Vector3f point_3D_reprojection(const Eigen::Vector2f &v, const cv:
 {
     return point_3D_reprojection(v, depth.at<DEPTH_TYPE>(v[1], v[0]), lookupX, lookupY);
 }
+
+template<typename DEPTH_TYPE>
+std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &points, const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
+{
+    const size_t N = points.size();
+    std::vector<Eigen::Vector3f> reprojected_points(N);
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [&](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                reprojected_points[i] = pixel_depth_to_3D_coordiantes(points[i], depth.at<DEPTH_TYPE>(points[i][1], points[i][0]), inv_fx, inv_fy, cx, cy);
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++){
+        reprojected_points[i] = pixel_depth_to_3D_coordiantes(points[i], depth.at<DEPTH_TYPE>(points[i][1], points[i][0]), inv_fx, inv_fy, cx, cy);
+    }
+#endif
+    return reprojected_points;
+}
+
 
 template<typename DEPTH_TYPE>
 std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vector2f> &vectors, const cv::Mat &depth, const cv::Mat &lookupX, const cv::Mat &lookupY)

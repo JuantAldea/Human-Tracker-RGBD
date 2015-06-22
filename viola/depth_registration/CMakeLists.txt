@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(depth_registration)
 
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBT_USE_DOUBLE_PRECISION -Wall -pg -O0 -fno-inline -ggdb3")
+#SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBT_USE_DOUBLE_PRECISION -Wall")
 # Unused warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wuninitialized -Winit-self -Wunused-function -Wunused-label -Wunused-variable -Wunused-but-set-variable -Wunused-but-set-parameter")

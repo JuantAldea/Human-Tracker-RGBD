@@ -34,8 +34,7 @@ inline cv::Mat create_ellipse_mask(const cv::Rect &rectangle, const int n_dims)
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int n_dims)
 {
-    cv::Mat mask;
-    mask.create(axis_y, axis_x, CV_8UC1);
+    cv::Mat mask = cv::Mat::zeros(axis_y, axis_x, CV_8UC1);
     const int rows = mask.rows;
     const int cols = mask.cols;
     const int n_rows_half = rows >> 1;
@@ -45,17 +44,25 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
     const float squared_radi_x_inverse = 1.0f / (radi_x * radi_x);
     const float squared_radi_y_inverse = 1.0f / (radi_y * radi_y);
     const int cols_minus_1 = cols - 1;
+    const int rows_minus_1 = rows - 1;
     //TODO USE_INTEL_TBB?
     for (int i = 0; i < n_rows_half; i++) {
-        uchar* mask_row_upper = mask.ptr<uchar>(i);
-        uchar* mask_row_lower = mask.ptr<uchar>(rows - 1 - i);
+        //uchar* mask_row_upper = mask.ptr<uchar>(i);
+        //uchar* mask_row_lower = mask.ptr<uchar>(rows_minus_1 - i);
         for (int j = 0; j < n_cols_half; j++) {
             const uchar point_within = point_within_ellipse(cv::Point(j, i), center, squared_radi_x_inverse, squared_radi_y_inverse) ? 1 : 0;
+            const int right_side_j = cols_minus_1 - j;
+            const int lower_half_i = rows_minus_1 - i;
+            if (point_within){
+                cv::line(mask, cv::Point(j, i), cv::Point(right_side_j, i), 1);
+                cv::line(mask, cv::Point(j, lower_half_i), cv::Point(right_side_j, lower_half_i), 1);
+            }
+            /*
             mask_row_upper[j] = point_within;
             mask_row_lower[j] = point_within;
-            const int right_side_j = cols_minus_1 - j;
             mask_row_upper[right_side_j] = point_within;
             mask_row_lower[right_side_j] = point_within;
+            */
         }
     }
     
@@ -67,6 +74,85 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
     cv::Mat mask_ndims;
     cv::merge(mask_channels, mask_ndims);
     return mask_ndims;
+}
+
+cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, const int n_dims)
+{
+    //e(x,y) = b^2*x^2 + a^2*y^2 - a^2*b^2
+    
+    /*
+    from: http://sydney.edu.au/engineering/it/research/tr/tr531.pdf
+    from: http://enchantia.com/graphapp/doc/tech/ellipses.html
+    @book{patrick2001drawing,
+      title={Drawing Ellipses Using Filled Rectangles},
+      author={Patrick, Lachlan J},
+      year={2001},
+      publisher={Basser Department of Computer Science, University of Sydney}
+    }
+    */
+    xc--;
+    yc--;
+    #define incx() x++, dxt += d2xt, t += dxt
+    #define incy() y--, dyt += d2yt, t += dyt
+    cv::Mat mask = cv::Mat::zeros(bb, aa, CV_8UC1);
+    const int a = (aa/2.0f);
+    const int b = (bb/2.0f);
+    int x = 0, y = b;
+    unsigned int width = 1;
+    long a2 = (long)a*a, b2 = (long)b*b;
+    long crit1 = -(a2/4.0f + a%2 + b2);
+    long crit2 = -(b2/4.0f + b%2 + a2);
+    long crit3 = -(b2/4.0f + b%2);
+    // e(x+1/2,y-1/2) - (a^2+b^2)/4
+    long t = -a2*y; 
+    long dxt = 2*b2*x, dyt = -2*a2*y;
+    long d2xt = 2*b2, d2yt = 2*a2;
+    const auto value = cv::Scalar::all(1);
+    while (y>=0 && x<=a) {
+        if (t + b2*x <= crit1 || t + a2*y <= crit3) {   
+              //e(x+1,y-1/2) <= 0
+              //e(x+1/2,y) <= 0
+            incx();
+            width += 2;
+        } else if (t - a2*y > crit2) { 
+            //e(x+1/2,y-1) > 0
+            //row(xc-x, yc-y, width);
+            cv::line(mask, cv::Point(xc-x, yc-y), cv::Point(xc-x+width, yc-y), value);
+            if (y!=0){
+                //row(xc-x, yc+y, width);
+                cv::line(mask, cv::Point(xc-x, yc+y), cv::Point(xc-x+width, yc+y), value);
+            }
+            incy();
+        } else {
+            //row(xc-x, yc-y, width);
+            cv::line(mask, cv::Point(xc-x, yc-y), cv::Point(xc-x+width, yc-y), value);
+            if (y!=0){
+                //row(xc-x, yc+y, width);
+                cv::line(mask, cv::Point(xc-x, yc+y), cv::Point(xc-x+width, yc+y), value);
+            }
+            incx();
+            incy();
+            width += 2;
+        }
+    }
+    if (b == 0){
+        //row(xc-a, yc, 2*a+1);
+        cv::line(mask, cv::Point(xc-a, yc), cv::Point(xc-a + 2*a+1, yc), value);
+    }
+    
+    if (n_dims == 1){
+        return mask;
+    }
+    
+    std::vector<cv::Mat> mask_channels(n_dims, mask);
+    cv::Mat mask_ndims;
+    cv::merge(mask_channels, mask_ndims);
+    return mask_ndims;
+}
+
+inline cv::Mat fast_create_ellipse_mask(const cv::Rect &rectangle, const int n_dims)
+{
+    return fast_create_ellipse_mask(cvRound(rectangle.width / 2.f), cvRound(rectangle.height / 2.f), rectangle.width, rectangle.height, n_dims);
 }
 
 cv::Mat create_ellipse_weight_mask(const cv::Mat &ellipse_mask)
@@ -115,6 +201,23 @@ inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int
     return normal;
 }
 
+float Q_rsqrt( float number )
+{
+    long i;
+    float x2, y;
+    const float threehalfs = 1.5F;
+ 
+    x2 = number * 0.5F;
+    y  = number;
+    i  = * ( long * ) &y;                       
+    i  = 0x5f3759df - ( i >> 1 );              
+    y  = * ( float * ) &i;
+    y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+    y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+ 
+    return y;
+}
+
 float ellipse_contour_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
     const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
 {
@@ -125,6 +228,8 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
     for (int i = 0; i < 90; i += angle_step){
         Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
         v.normalize();
+        //v[0] /= Q_rsqrt(v[0] * v[0] + v[1] * v[1]);
+        //v[1] /= Q_rsqrt(v[0] * v[0] + v[1] * v[1]);
 
         const cv::Vec2f v_1(v[0], v[1]);
         const cv::Vec2f v_2(-v[0], -v[1]);

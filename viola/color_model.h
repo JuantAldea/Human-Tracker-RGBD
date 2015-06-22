@@ -8,7 +8,7 @@ IGNORE_WARNINGS_PUSH
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
 IGNORE_WARNINGS_POP
-
+#include <cassert>
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
 cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image);
@@ -21,36 +21,45 @@ cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &m
     for (int c = 0; c < ndims; c++){
         bin_widths[c] = (ranges[c][1] - ranges[c][0]) / hist_size[c];
     }
-    //const float bin_width_1 = (ranges[0][1] - ranges[0][0]) / hist_size[0];
-    //const float bin_width_2 = (ranges[1][1] - ranges[1][0]) / hist_size[1];
-
+    
+    const float bin_width_1 = (ranges[0][1] - ranges[0][0]) / hist_size[0];
+    const float bin_width_2 = (ranges[1][1] - ranges[1][0]) / hist_size[1];
+    
+    assert(bin_widths[channels[0]] == bin_width_1);
+    assert(bin_widths[channels[1]] == bin_width_2);
+    cv::Mat_<uchar> image2 = image;
     const int img_channels = image.channels();
     for (int i = 0; i < image.rows; i++){
+        const uchar *p_row = image.ptr<uchar>(i);
         for (int j = 0; j < image.cols; j++){
             if (mask.at<uchar>(i, j)){
                 uint bins[ndims];
                 for (int c = 0; c < ndims; c++){
-                    const uchar value = image.at<uchar>(i, j * img_channels + channels[c]);
-                    bins[c] = value / bin_widths[c];
-                    //const uint bin_h = hsv[0] / bin_width_1;
-                    //const uint bin_s = hsv[1] / bin_width_2;
+                    const uchar value = p_row[j * img_channels + channels[c]];
+                    bins[c] = value / bin_widths[channels[c]];
                 }
                 //const cv::Vec3b hsv = image.at<cv::Vec3b>(i, j);
                 //const uint bin_h = hsv[0] / bin_width_1;
                 //const uint bin_s = hsv[1] / bin_width_2;
                 //hist.at<float>(bin_h, bin_s) += 1;
-                hist.at<float>(bins[0], bins[1]) += 1;
-                float *p = hist.ptr<float>(0);
+                std::cout << i << ' ' << j << ' ' << sqrt(pow(i - image.rows, 2 ) + pow(j - image.cols, 2)) << ' ' << weights.at<float>(i, j) << std::endl;
+                hist.at<float>(bins[0], bins[1]) += mask.at<float>(i, j);
+                
+                //float *p = hist.ptr<float>(0);
                 /*
                 for (int c = 0; c < ndims - 1; c++){
                     p += hist_size[c] * bins[c];
                 }
-                */
                 p += hist_size[0] * bins[0];
-                p += hist_size[1] * bins[1];
+                p += bins[1];
+                float *a = &hist.at<float>(bins[0], bins[1]);
+                std::cout <<"p " << p << std::endl;
+                std::cout << "a "  << a << std::endl;
+                assert(p == a);
                 *p += 1;
                 //make
-                p[bins[ndims - 1]] += 1;
+                //p[bins[ndims - 1]] += 1;
+                */
                 
 
             }
