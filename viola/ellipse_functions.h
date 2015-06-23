@@ -8,6 +8,8 @@ IGNORE_WARNINGS_PUSH
 
 IGNORE_WARNINGS_POP
 
+#include "misc_helpers.h"
+
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int n_dims);
 
 cv::Mat create_ellipse_weight_mask(const cv::Mat &ellipse_mask, std::function<float(int, int)> w_function);
@@ -201,56 +203,46 @@ inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int
     return normal;
 }
 
-float Q_rsqrt( float number )
-{
-    long i;
-    float x2, y;
-    const float threehalfs = 1.5F;
- 
-    x2 = number * 0.5F;
-    y  = number;
-    i  = * ( long * ) &y;                       
-    i  = 0x5f3759df - ( i >> 1 );              
-    y  = * ( float * ) &i;
-    y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
-    y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
- 
-    return y;
-}
-
 float ellipse_contour_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
     const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
 {
     float dot_sum = 0;
     
-    const float total_steps = 360 / angle_step;
+    const int total_steps = 360 / angle_step;
     
-    for (int i = 0; i < 90; i += angle_step){
-        Eigen::Vector2f v = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
+    std::vector<Eigen::Vector2f> normal_vectors(total_steps / 4);
+    for (int i = 0, j = 0; i < 90; i += angle_step, j++){
+        normal_vectors[j] = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
+        const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
+        normal_vectors[j] *= inv_modulus;
+        /*
+        Eigen::Vector2f v = normal_vectors[j];
         v.normalize();
-        //v[0] /= Q_rsqrt(v[0] * v[0] + v[1] * v[1]);
-        //v[1] /= Q_rsqrt(v[0] * v[0] + v[1] * v[1]);
+        */
+    }
 
+    const int total_vectors = normal_vectors.size();
+    for (int i = 0; i < total_vectors; i++){
+        const Eigen::Vector2f &v = normal_vectors[i];
+        
         const cv::Vec2f v_1(v[0], v[1]);
         const cv::Vec2f v_2(-v[0], -v[1]);
         const cv::Vec2f v_3(-v[1], v[0]);
         const cv::Vec2f v_4(v[1], -v[0]);
 
-        const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
-        const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
-        const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));
-        const cv::Point pixel_coordinates_4 = center + cv::Point(cvRound(v_4[0] * radius_x), cvRound(v_4[1] * radius_y));
-        /*
-        std:: cout << "CENTER " << center.x << ' ' << center.y << std::endl;
-        std:: cout << pixel_coordinates_1.y << ' ' << pixel_coordinates_1.x << std::endl;
-        std:: cout << pixel_coordinates_2.y << ' ' << pixel_coordinates_2.x << std::endl;
-        std:: cout << pixel_coordinates_3.y << ' ' << pixel_coordinates_3.x << std::endl;
-        std:: cout << pixel_coordinates_4.y << ' ' << pixel_coordinates_4.x << std::endl;
-        */
-        const cv::Vec2f gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-        const cv::Vec2f gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-        const cv::Vec2f gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-        const cv::Vec2f gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+        const int pixel_coordinates_1_x = center.x + cvRound(v_1[0] * radius_x);
+        const int pixel_coordinates_1_y = center.y + cvRound(v_1[1] * radius_y);
+        const int pixel_coordinates_2_x = center.x + cvRound(v_2[0] * radius_x);
+        const int pixel_coordinates_2_y = center.y + cvRound(v_2[1] * radius_y);
+        const int pixel_coordinates_3_x = center.x + cvRound(v_3[0] * radius_x);
+        const int pixel_coordinates_3_y = center.y + cvRound(v_3[1] * radius_y);
+        const int pixel_coordinates_4_x = center.x + cvRound(v_4[0] * radius_x);
+        const int pixel_coordinates_4_y = center.y + cvRound(v_4[1] * radius_y);
+
+        const cv::Vec2f &gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1_y, pixel_coordinates_1_x);
+        const cv::Vec2f &gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2_y, pixel_coordinates_2_x);
+        const cv::Vec2f &gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3_y, pixel_coordinates_3_x);
+        const cv::Vec2f &gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4_y, pixel_coordinates_4_x);
         
         float magnitude_v1;
         float magnitude_v2;
@@ -258,10 +250,10 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         float magnitude_v4;
         
         if (!gradient_magnitude.empty()){
-            magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1.y, pixel_coordinates_1.x);
-            magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2.y, pixel_coordinates_2.x);
-            magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3.y, pixel_coordinates_3.x);
-            magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4.y, pixel_coordinates_4.x);
+            magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1_y, pixel_coordinates_1_x);
+            magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2_y, pixel_coordinates_2_x);
+            magnitude_v3 = gradient_magnitude.at<float>(pixel_coordinates_3_y, pixel_coordinates_3_x);
+            magnitude_v4 = gradient_magnitude.at<float>(pixel_coordinates_4_y, pixel_coordinates_4_x);
         }else{
             magnitude_v1 = 1;
             magnitude_v2 = 1;
@@ -283,6 +275,11 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         
         
         if (output != nullptr){
+            const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
+            const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
+            const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));
+            const cv::Point pixel_coordinates_4 = center + cv::Point(cvRound(v_4[0] * radius_x), cvRound(v_4[1] * radius_y));
+
             const cv::Point end_model_v1(pixel_coordinates_1 + cv::Point(cvRound(v_1[0] * 10), cvRound(v_1[1] * 10)));
             const cv::Point end_model_v2(pixel_coordinates_2 + cv::Point(cvRound(v_2[0] * 10), cvRound(v_2[1] * 10)));
             const cv::Point end_model_v3(pixel_coordinates_3 + cv::Point(cvRound(v_3[0] * 10), cvRound(v_3[1] * 10)));

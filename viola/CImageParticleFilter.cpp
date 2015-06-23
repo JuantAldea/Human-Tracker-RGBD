@@ -38,14 +38,16 @@ void CImageParticleFilter<DEPTH_TYPE>::update_color_model(const cv::Mat &model)
 template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation)
 {
-    const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
-    const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
-    
-    ASSERT_(obs_image);
-    ASSERT_(obs_depth);
 
-    const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
-    const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
+    const CObservationImagePtr image_color = observation->getObservationBySensorLabelAs<CObservationImagePtr>("color");
+    const CObservationImagePtr image_depth = observation->getObservationBySensorLabelAs<CObservationImagePtr>("depth");
+    
+    ASSERT_(image_color);
+    ASSERT_(image_depth);
+
+    const cv::Mat image_mat = cv::Mat(image_color->image.getAs<IplImage>());
+    const cv::Mat depth_mat = cv::Mat(image_depth->image.getAs<IplImage>());
+    
     auto update_particle = [&](const size_t i) {
         //TODO can x, y go outside of the frame?
         /*
@@ -98,17 +100,17 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
 template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
-    const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
-    
-    ASSERT_(obs_image);
+    const CObservationImagePtr image_hsv = observation->getObservationBySensorLabelAs<CObservationImagePtr>("hsv");
+    const CObservationImagePtr image_gradient_vectors = observation->getObservationBySensorLabelAs<CObservationImagePtr>("gradient_vectors");
+    const CObservationImagePtr image_gradient_magnitude = observation->getObservationBySensorLabelAs<CObservationImagePtr>("gradient_magnitude");
 
-    const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
-    cv::Mat frame_hsv;
-    cv::cvtColor(image_mat, frame_hsv, cv::COLOR_BGR2HSV);
-    
-    cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
-    std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(image_mat);
-    
+    ASSERT_(image_hsv);
+    ASSERT_(image_gradient_vectors);
+    ASSERT_(image_gradient_magnitude);
+
+    const cv::Mat frame_hsv = cv::Mat(image_hsv->image.getAs<IplImage>());
+    const cv::Mat gradient_vectors = cv::Mat(image_gradient_vectors->image.getAs<IplImage>());
+    const cv::Mat gradient_magnitude = cv::Mat(image_gradient_magnitude->image.getAs<IplImage>());
 
     size_t N = m_particles.size();
 
@@ -136,17 +138,14 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         //std::cout << mask2.rows;
         const cv::Mat mask = fast_create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-        const cv::Mat roi_img(particle_roi_img.size(), particle_roi_img.type());
-        cv::Mat mask_3C;
-        cv::merge(std::vector<cv::Mat>{mask, mask, mask}, mask_3C);
-        bitwise_and(image_mat(particle_roi), mask_3C, roi_img);
+        //const cv::Mat roi_img(particle_roi_img.size(), particle_roi_img.type());
+        //cv::Mat mask_3C;
+        //cv::merge(std::vector<cv::Mat>{mask, mask, mask}, mask_3C);
+        //bitwise_and(frame_color(particle_roi), mask_3C, roi_img);
 
         if (i == 0){
             particle_image.loadFromIplImage(new IplImage(particle_roi_img));
             particle_window.showImage(particle_image);
-            //std::cout << "m_particles[i].d->object_x_length_pixels " << m_particles[i].d->object_x_length_pixels << std::endl;
-            //std::cout << "MASK: " << mask.rows << ' ' << mask.cols << std::endl;
-            //std::cout << "MASKROI: " << particle_roi_img.rows << ' ' << particle_roi_img.cols << std::endl;
         }
 
         particles_color_model[i] = compute_color_model(particle_roi_img, mask);
@@ -185,8 +184,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         if(particles_color_model[i].empty()){
             continue;
         }
-        
-        //continue;
+
         if (m_particles[i].d->object_x_length_pixels == 0 ||  m_particles[i].d->object_y_length_pixels == 0){
             continue;
         }
