@@ -739,7 +739,7 @@ int particle_filter()
         gradient_color_window.showImage(gradient_magnitude_image);
 
         CImage frame_particles;
-        frame_particles.loadFromIplImage(new IplImage(color_frame));
+        frame_particles.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(frame_particles);
 
 #ifdef _3D
