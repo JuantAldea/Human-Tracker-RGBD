@@ -49,28 +49,27 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
     const cv::Mat depth_mat = cv::Mat(image_depth->image.getAs<IplImage>());
     
     auto update_particle = [&](const size_t i) {
-        //TODO can x, y go outside of the frame?
-        /*
         const double old_z = m_particles[i].d->z;
         const float old_x = m_particles[i].d->x;
         const float old_y = m_particles[i].d->y;
-        */
-        const double new_z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
+        
         
         m_particles[i].d->x += dt * m_particles[i].d->vx + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->y += dt * m_particles[i].d->vy + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
+        //TODO can x, y go outside of the frame?
+        const double new_z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
         m_particles[i].d->z = new_z;
         //m_particles[i].d->z += dt * m_particles[i].d->vz + TRANSITION_MODEL_STD_XY * randomGenerator.drawGaussian1D_normalized();
         
-        /*
         m_particles[i].d->vx = (m_particles[i].d->x - old_x) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy = (m_particles[i].d->y - old_y) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vz = (m_particles[i].d->z - old_z) / dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
-        */
 
+        /*
         m_particles[i].d->vx = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vz = TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
+        */
         
         Eigen::Vector2i top_corner, bottom_corner;
         std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(m_particles[i].d->x, m_particles[i].d->y), m_particles[i].d->z,
@@ -180,7 +179,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 #else
     for (size_t i = 0; i < N; i++) {
         compute_particles_color_model(i);
-        
+        particles_ellipse_fitting[i] = 0;
         if(particles_color_model[i].empty()){
             continue;
         }
@@ -269,7 +268,7 @@ std::cout << "MAX " << max_fitting << " min " << min_fitting << std::endl;
             double score = 1;
             //score *= (1 - distance_hist) * particles_ellipse_fitting[i];
             score *= (1 - distance_hist);
-            //score *= particles_ellipse_fitting[i];
+            score *= particles_ellipse_fitting[i];
             //std::cout << "SCORE: " << (1 - distance_hist) * particles_ellipse_fitting[i] << ' ' << (1 - distance_hist) << ' ' << particles_ellipse_fitting[i] << std::endl;
             m_particles[i].log_w += log(score);
         } else {

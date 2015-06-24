@@ -181,7 +181,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
-    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
+    cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -195,7 +195,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::Mat image_gray_float;
     
     //cv::Mat image_gray2;
-    //bilateralFilter ( image_gray, image_gray2, 15, 80, 80 );
+    //bilateralFilter (image_gray, image_gray2, 15, 80, 80);
     //image_gray = image_gray2;
     
     image_gray.convertTo(image_gray_float, CV_32F);

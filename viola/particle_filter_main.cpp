@@ -140,53 +140,96 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale,
     }
 }
 
+struct StateEstimation
+{
+    float x;
+    float y;
+    float z;
+    float v_x;
+    float v_y;
+    float v_z;
+    int radius_x;
+    int radius_y;
+    float score_color;
+    float score_shape;
+    float score_total;
+    cv::Point center;
+    cv::Rect region;
+    cv::Mat color_model;
+
+    StateEstimation():
+        x(-1), y(-1), z(-1), v_x(-1), v_y(-1), v_z(-1), radius_x(-1), radius_y(-1), score_color(-1), score_shape(-1), score_total(-1), center(), region(), color_model()
+    {
+        ;
+    };
+
+    StateEstimation(const float x, const float y, const float z, const float v_x, const float v_y, const float v_z,
+        const int radius_x, const int radius_y, const float score_color, const float score_shape, const float score_total, const cv::Point &center, const cv::Rect &region,
+        const cv::Mat &color_model) :
+        x(x), y(y), z(z), v_x(v_x), v_y(v_y), v_z(v_z), radius_x(radius_x), radius_y(radius_y), score_color(score_color), score_shape(score_shape), score_total(score_total),
+        center(center), region(region), color_model(color_model)
+    {
+        ;
+    };
+
+    void print(void)
+    {
+        std::printf("Estate: (%f %f %f) -> (%d %d)\n", x, y, z, radius_x, radius_y);
+        std::cout << center << std::endl;
+        std::cout << region << std::endl;
+    }
+};
+
 template <typename DEPTH_TYPE>
-float do_tracking(CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particles, const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats,
-    float &avrg_x, float &avrg_y, float &avrg_z, float &avrg_vx, float &avrg_vy, float &avrg_vz)
+void do_tracking(StateEstimation &estate, CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particles,
+    const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats, float &mean_weight)
 {
     PF.executeOn(particles, NULL, &observation, &stats);
-    float mean_weight = particles.get_mean(avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
-    cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
-    cout << "Particle filter ESS: " << particles.ESS() << endl;
-    return mean_weight;
+    mean_weight = particles.get_mean(estate.x, estate.y, estate.z, estate.v_x, estate.v_y, estate.v_z);
+    //cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
+    //cout << "Particle filter ESS: " << particles.ESS() << endl;
 }
 
 template <typename DEPTH_TYPE>
-float evaluate_estimation(const float avrg_x, const float avrg_y, const ImageRegistration &reg,
-    const cv::Mat &hsv_frame, const cv::Mat &gradient_vectors, const cv::Mat &depth_frame,
-    const CImageParticleFilter<DEPTH_TYPE> &particles, int &radius_x, int &radius_y)
+void build_visual_model(StateEstimation &state, const ImageRegistration &reg, const cv::Mat &hsv_frame,
+    const cv::Mat &depth_frame)
 {
     Eigen::Vector2i top_corner, bottom_corner;
-    std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(avrg_x, avrg_y),
-        depth_frame.at<DEPTH_TYPE>(cvRound(avrg_y), cvRound(avrg_x)),
-        Eigen::Vector2f(0.06*PERCENTAGE, 0.06*PERCENTAGE), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-
-    const cv::Rect model_roi(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
-    radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
-    radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
-    const cv::Point center(top_corner[0] + radius_x , top_corner[1] + radius_y);
+    const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(state.y), cvRound(state.x));
+    const double z = center_measured_depth > 0 ? center_measured_depth : state.z; 
+    
+    std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(state.x, state.y), z,
+        Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+    
+    state.region = cv::Rect(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
+    state.radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
+    state.radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
+    state.center = cv::Point(top_corner[0] + state.radius_x , top_corner[1] + state.radius_y);
 
     // test whether the estimated roi lies inside of the image frame or not
     const cv::Rect rectangle_image = cv::Rect(0, 0, hsv_frame.cols, hsv_frame.rows);
-    const cv::Rect rectangle_image_roi_intersection = rectangle_image & model_roi;
+    const cv::Rect rectangle_image_roi_intersection = rectangle_image & state.region;
     
-    if (radius_x != 0 && radius_y != 0){
-        return 0;
+    if (state.region.area() == rectangle_image_roi_intersection.area()){
+        const cv::Mat mask = create_ellipse_mask(state.region, 1);
+        cv::Mat hsv_roi = hsv_frame(state.region);
+        state.color_model = compute_color_model(hsv_roi, mask);
     }
-    
-    float score = 0;
-    if (model_roi.area() == rectangle_image_roi_intersection.area()){
-        const cv::Mat mask = create_ellipse_mask(model_roi, 1);
-        cv::Mat hsv_roi = hsv_frame(model_roi);
-        const cv::Mat model = compute_color_model(hsv_roi, mask);
-        const double distance_hist = cv::compareHist(model, particles.color_model, CV_COMP_BHATTACHARYYA);
-        score *= 1 - distance_hist;
-        ///float fitting_magnitude = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-        const float shape_fitting = ellipse_contour_test(center, radius_x * 1.0/PERCENTAGE, radius_y * 1.0/PERCENTAGE, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), nullptr);
-        score *= shape_fitting;
+}
+
+template <typename DEPTH_TYPE>
+void score_visual_model(StateEstimation &state, const CImageParticleFilter<DEPTH_TYPE> &particles, const cv::Mat &gradient_vectors)
+{
+    if (state.color_model.empty()){
+        state.score_total = -1;
+        state.score_color = -1;
+        state.score_shape = -1;
+        return;
     }
-    
-    return score;
+
+    state.score_color = 1 - cv::compareHist(state.color_model, particles.color_model, CV_COMP_BHATTACHARYYA);
+    state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), nullptr);
+    state.score_total = state.score_color * state.score_shape;
 }
 
 
@@ -387,21 +430,19 @@ int particle_filter()
         CObservationImagePtr obsImage_depth = CObservationImage::Create();
         CObservationImagePtr obsImage_gradient_vectors = CObservationImage::Create();
         CObservationImagePtr obsImage_gradient_magnitude = CObservationImage::Create();
-        
+
         obsImage_color->image.loadFromIplImage(new IplImage(color_frame));
         obsImage_color->sensorLabel = "color";
-        
+
         obsImage_hsv->image.loadFromIplImage(new IplImage(hsv_frame));
         obsImage_hsv->sensorLabel = "hsv";
-        
+
         obsImage_depth->image.loadFromIplImage(new IplImage(depth_frame));
         obsImage_depth->sensorLabel = "depth";
-        
-        
+
         obsImage_gradient_vectors->image.loadFromIplImage(new IplImage(gradient_vectors));
         obsImage_gradient_vectors->sensorLabel = "gradient_vectors";
-        
-        
+
         obsImage_gradient_magnitude->image.loadFromIplImage(new IplImage(gradient_magnitude));
         obsImage_gradient_magnitude->sensorLabel = "gradient_magnitude";
         
@@ -412,7 +453,6 @@ int particle_filter()
         observation.insert(obsImage_depth);
         observation.insert(obsImage_gradient_vectors);
         observation.insert(obsImage_gradient_magnitude);
-
 
         /*
         double min, max;
@@ -463,17 +503,12 @@ int particle_filter()
 
                 float x_radius = (bottom_corner - top_corner)[0] * 0.5;
                 float y_radius = (bottom_corner - top_corner)[1] * 0.5;
-                /*
-                x_radius_global = x_radius;
-                y_radius_global = y_radius;
-                x_global = center.x;
-                y_global = center.y;
-                */
 
                 //const cv::Rect model_roi(center.x - radius, center.y - radius, 2 * radius, 2 * radius);
-                const cv::Rect model_roi(top_corner[0] + (bottom_corner[0] - top_corner[0]) * 0.1,
-                    top_corner[1] + (bottom_corner[1] - top_corner[1]) * 0.1,
-                    (bottom_corner[0] - top_corner[0]) * PERCENTAGE, (bottom_corner[1] - top_corner[1]) * PERCENTAGE);
+                const cv::Rect model_roi(top_corner[0], top_corner[1],
+                    (bottom_corner[0] - top_corner[0]),
+                    (bottom_corner[1] - top_corner[1])
+                );
 
                 const cv::Mat mask = create_ellipse_mask(model_roi, 1);
                 cv::Mat hsv_roi = hsv_frame(model_roi);
@@ -495,12 +530,12 @@ int particle_filter()
 
                 std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
                 particles.initializeParticles(NUM_PARTICLES,
-                    make_pair(center.x, x_radius * PERCENTAGE), make_pair(center.y, y_radius * PERCENTAGE), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
+                    make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
                     //make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(0, 250.f),
                     //make_pair(center.x, 0), make_pair(center.y, 0), make_pair(0, 25),
                     //make_pair(0, 500), make_pair(0, 500), make_pair(0, 500),
                     make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                    make_pair(0.12 * PERCENTAGE, 0.12 * PERCENTAGE),
+                    make_pair(0.12, 0.12),
                     reg
                 );
 
@@ -517,36 +552,73 @@ int particle_filter()
                 model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
                 model_histogram_window.showImage(model_histogram_image);
                 //mrpt::system::os::getch();
+
             }
 
         } else {
+            StateEstimation estimated_state;
             static CParticleFilter::TParticleFilterStats stats;
-            float avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz;
-
-            float mean_weight = do_tracking(PF, particles, observation, stats, avrg_x, avrg_y, avrg_z, avrg_vx, avrg_vy, avrg_vz);
-
-            cv::circle(color_display_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::line(color_display_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy), cv::Scalar(0, 255, 0), 5, 1, 0);
-
-            std::cout << "MEAN " << mean_weight << " " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
-            int radius_x, radius_y;
-            float score = evaluate_estimation(avrg_x, avrg_y, reg, hsv_frame, gradient_vectors, depth_frame, particles, radius_x, radius_y);
-            cv::Point center(avrg_x, avrg_y);
             
-            if (score > LIKEHOOD_FOUND){
-                cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                cv::circle(color_display_frame, center, (radius_x + radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
+            float mean_weight;
+            do_tracking(estimated_state, PF, particles, observation, stats, mean_weight);
+            build_visual_model<DEPTH_TYPE>(estimated_state, reg, hsv_frame, depth_frame);
 
+            CImage model_candidate;
+            model_candidate.loadFromIplImage(new IplImage(color_frame(estimated_state.region)));
+            //model_candidate.loadFromIplImage(new IplImage(w_mask_img));
+            model_candidate_window.showImage(model_candidate);
+
+            CImage model_candidate_histogram_image;
+            model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(estimated_state.color_model, 10)));
+            model_candidate_histogram_window.showImage(model_candidate_histogram_image);
+
+            score_visual_model(estimated_state, particles, gradient_vectors);
+
+            //std::cout << "MEAN " << mean_weight << " " << estimated_state.x << ' ' << estimated_state.y << ' ' << estimated_state.z << ' '
+                    //<< estimated_state.v_x << ' ' << estimated_state.v_y << ' ' << estimated_state.v_z << std::endl;
+            
+            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 255, 0), 5, 1, 0);
+            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            cv::line(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), cv::Point(estimated_state.x + estimated_state.v_x, estimated_state.y + estimated_state.v_y), cv::Scalar(0, 255, 0), 5, 1, 0);
+            //std::cout << "SCORE: " << estimated_state.score_total <<  " " << estimated_state.score_shape << '*' << estimated_state.score_color << std::endl;
+            
+            if (estimated_state.score_total > LIKEHOOD_FOUND){
+                cv::circle(color_display_frame, estimated_state.center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                cv::circle(color_display_frame, estimated_state.center, (estimated_state.radius_x + estimated_state.radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
                 //cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
                 //cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
             }
 
-            if (score > LIKEHOOD_UPDATE){
-                std::cout << "MEAN UPDATING MODEL" << std::endl;
+            if (estimated_state.score_total > LIKEHOOD_UPDATE){
                 CImage model_frame;
-                model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
+                particles.update_color_model(estimated_state.color_model);
+                model_frame.loadFromIplImage(new IplImage(color_frame(estimated_state.region)));
                 model_image_window.showImage(model_frame);
-                particles.update_color_model(model);
+            }
+
+            std::ostringstream oss;
+            oss << "SCORE:" << estimated_state.score_total << " ";
+            oss << "BHAT: " << estimated_state.score_color << " ";
+            oss << "SHAPE: " << estimated_state.score_shape << " ";
+             const cv::Point frame_center(gradient_magnitude.cols / 2 , gradient_magnitude.rows/2);
+            
+            float fitting = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
+            
+            float fitting_01 = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+            
+            ellipse_contour_test(estimated_state.center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+            
+            oss << "SHAPE CENTER: " << fitting_01 << " (" << fitting << ")";
+            {
+                int fontFace =  cv::FONT_HERSHEY_PLAIN;
+                double fontScale = 2;
+                int thickness = 2;
+
+                int baseline = 0;
+                cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
+                cv::Point textOrg(0, textSize.height + 10);
+                //cv::Point textOrg(textSize.width, textSize.height);
+                putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
             }
             /*
             {
@@ -667,7 +739,7 @@ int particle_filter()
         gradient_color_window.showImage(gradient_magnitude_image);
 
         CImage frame_particles;
-        frame_particles.loadFromIplImage(new IplImage(color_display_frame));
+        frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);
 
 #ifdef _3D
