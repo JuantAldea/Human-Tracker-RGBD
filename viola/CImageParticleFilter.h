@@ -56,6 +56,9 @@ class CImageParticleFilter :
 {
 
 public:
+    
+    using ParticleType = typename decltype(m_particles)::value_type;
+
     void update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation);
 
     void weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation);
@@ -64,7 +67,8 @@ public:
         const mrpt::obs::CActionCollection*,
         const mrpt::obs::CSensoryFrame * const observation,
         const bayes::CParticleFilter::TParticleFilterOptions&);
-
+    void split_particles();
+    void sort_particles();
     void initializeParticles(const size_t M,
                              const pair<float, float> &x,
                              const pair<float, float> &y,
@@ -85,7 +89,11 @@ public:
     CImage particle_image;
     cv::Mat color_model;
 
+
 private:
+    vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_valid_roi;
+    vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;
+
     ImageRegistration registration_data;
     float object_x_length;
     float object_y_length;

@@ -43,7 +43,7 @@ std::string type2str(int type)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 
-// the magical Quake 3 fast inverse sqrt, A.K.A 0x5f3759df
+// the magical Quake fast inverse sqrt, A.K.A 0x5f3759df
 float Q_rsqrt(const float number)
 {
     const float threehalfs = 1.5F;
