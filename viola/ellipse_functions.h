@@ -203,25 +203,34 @@ inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int
     return normal;
 }
 
+// This function can perform both, gradient magnitude aware and  purely gradient direction evaluation; the second
+// is made by passing an empty matrix as gradient_magnitude parameter.
 float ellipse_contour_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
     const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
 {
-    float dot_sum = 0;
     
     const int total_steps = 360 / angle_step;
     
-    std::vector<Eigen::Vector2f> normal_vectors(total_steps / 4);
-    for (int i = 0, j = 0; i < 90; i += angle_step, j++){
-        normal_vectors[j] = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
-        const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
-        normal_vectors[j] *= inv_modulus;
-        /*
-        Eigen::Vector2f v = normal_vectors[j];
-        v.normalize();
-        */
+    //TODO THINK ABOUT THIS
+    static std::vector<Eigen::Vector2f> normal_vectors;
+    //normal_vector is static so its only filled one time,
+    //given that ellipses have always the same proportion, one time is enough
+    if (normal_vectors.size() == 0){
+        std::cout  << "DENTRO\n";
+        normal_vectors.resize(total_steps / 4);
+        for (int i = 0, j = 0; i < 90; i += angle_step, j++){
+            normal_vectors[j] = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
+            const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
+            normal_vectors[j] *= inv_modulus;
+            /*
+            Eigen::Vector2f v = normal_vectors[j];
+            v.normalize();
+            */
+        }
     }
 
     const int total_vectors = normal_vectors.size();
+    float dot_sum = 0;
     for (int i = 0; i < total_vectors; i++){
         const Eigen::Vector2f &v = normal_vectors[i];
         
@@ -279,8 +288,7 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
 */    
         dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
         
-        
-        if (output != nullptr){
+        if (unlikely(output != nullptr)){
             const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
             const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
             const cv::Point pixel_coordinates_3 = center + cv::Point(cvRound(v_3[0] * radius_x), cvRound(v_3[1] * radius_y));

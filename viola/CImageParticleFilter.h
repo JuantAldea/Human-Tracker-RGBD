@@ -85,9 +85,12 @@ public:
     void print_particle_state(void) const;
 
     int64_t last_time;
+    cv::Mat color_model;
+
+#ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;
-    cv::Mat color_model;
+#endif
 
 
 private:

@@ -181,7 +181,8 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
     cv::Mat orig = image.clone();
-    cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
+    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
+    cv::medianBlur(orig, orig, 7);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -213,6 +214,8 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::pow(grad_x_float, 2.f, squared_grad_x);
     cv::pow(grad_y_float, 2.f, squared_grad_y);
     cv::sqrt(squared_grad_x + squared_grad_y, gradient_modulus);
+    cv::Mat gradient_modulus_copy = gradient_modulus.clone();
+    cv::threshold(gradient_modulus_copy, gradient_modulus, 1000, 0, cv::THRESH_TOZERO);
 
     grad_x_float /= gradient_modulus;
     grad_y_float /= gradient_modulus;

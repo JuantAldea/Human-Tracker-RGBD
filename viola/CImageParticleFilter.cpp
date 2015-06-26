@@ -131,7 +131,6 @@ void CImageParticleFilter<DEPTH_TYPE>::split_particles()
     }
 }
 
-
 template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
@@ -154,26 +153,29 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
     vector<cv::Mat> particles_color_model(N);
     vector<float> particles_ellipse_fitting(N);
+    vector<cv::Rect> particles_roi(N);
 
-    auto compute_valid_particle_color_model = [&](size_t i){
+    for (size_t i = 0; i < N; i++){
         const ParticleType &particle = particles_valid_roi[i];
-        const cv::Rect particle_roi(
+        particles_roi[i] = cv::Rect(
             particle.d->x - particle.d->object_x_length_pixels * 0.5,
             particle.d->y - particle.d->object_y_length_pixels * 0.5,
             particle.d->object_x_length_pixels, particle.d->object_y_length_pixels
         );
+    }
 
+    auto compute_valid_particle_color_model = [&](size_t i){
+        const cv::Rect &particle_roi = particles_roi[i];
         const cv::Mat mask = fast_create_ellipse_mask(particle_roi, 1);
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-        
-        //TODO DEBUG CODE
+        //particles_color_model[i] = compute_color_model2(particle_roi_img, mask);
+        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+#ifdef DEBUG
         if (i == 0){
             particle_image.loadFromIplImage(new IplImage(particle_roi_img));
             particle_window.showImage(particle_image);
         }
-
-        //particles_color_model[i] = compute_color_model2(particle_roi_img, mask);
-        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+#endif
     };
 
 #ifdef USE_INTEL_TBB
@@ -182,18 +184,19 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
             &gradient_vectors, &gradient_magnitude, &particles_ellipse_fitting](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {                
                 compute_valid_particle_color_model(i);
-                
                 const ParticleType &particle = particles_valid_roi[i];
                 particles_ellipse_fitting[i] = ellipse_contour_test(
                     cv::Point(particle.d->x, particle.d->y),
                         particle.d->object_x_length_pixels * 0.5,
                         particle.d->object_y_length_pixels * 0.5,
-                        ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, nullptr
+                        ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors,
+                        gradient_magnitude, nullptr
                 );
-                //TODO DEBUG CODE
+#ifdef DEBUG
                 if (i == 0){
                     std::cout << "FITTING 0 " << particles_ellipse_fitting[i] << std::endl;
                 }
+#endif
             }
         }
     );
@@ -205,7 +208,8 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
             cv::Point(particle.d->x, particle.d->y),
                 particle.d->object_x_length_pixels * 0.5,
                 particle.d->object_y_length_pixels * 0.5,
-                ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, nullptr
+                ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors,
+                gradient_magnitude, nullptr
         );
     }
 #endif
