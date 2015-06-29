@@ -186,17 +186,17 @@ cv::Mat create_ellipse_weight_mask(const cv::Mat &ellipse_mask)
     return weight_mask;
 }
 
-inline Eigen::Vector2f calculate_ellipse_point(const cv::Point &center, const int axis_x, const int axis_y, const float angle)
+inline Eigen::Vector2f calculate_ellipse_point(const cv::Point &center, const float axis_x, const float axis_y, const float angle)
 {
     return Eigen::Vector2f(axis_x * cos(angle) + center.x, axis_y * sin(angle) + center.y);
 }
 
-inline Eigen::Vector2f calculate_ellipse_normal(const int axis_x, const int axis_y, const float angle)
+inline Eigen::Vector2f calculate_ellipse_normal(const float axis_x, const float axis_y, const float angle)
 {
     return Eigen::Vector2f(axis_x * cos(angle), axis_y * sin(angle));
 }
 
-inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int axis_y, const float angle)
+inline Eigen::Vector2f calculate_ellipse_orthonormal(const float axis_x, const float axis_y, const float angle)
 {
     Eigen::Vector2f normal = calculate_ellipse_normal(axis_x, axis_y, angle);
     normal.normalize();
@@ -205,23 +205,13 @@ inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int
 
 std::vector<Eigen::Vector2f> calculate_ellipse_normals(const float radius_x, const float radius_y, const int angle_step)
 {
-    float min_radius = std::min(radius_x, radius_y);
-    int factor = 1;
-
-    while(min_radius < 1){
-        factor *= 10;
-        min_radius *= factor;
-    }
-
-    const float scaled_radius_x = radius_x * factor;
-    const float scaled_radius_y = radius_y * factor;
-
     const int total_steps = 360 / angle_step;
     std::vector<Eigen::Vector2f> normal_vectors(total_steps / 4);
     for (int i = 0, j = 0; i < 90; i += angle_step, j++){
-        normal_vectors[j] = calculate_ellipse_normal(scaled_radius_x, scaled_radius_y, M_PI * i / 180.0);
+        normal_vectors[j] = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
         const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
         normal_vectors[j] *= inv_modulus;
+        std::cout << normal_vectors[j][0] << ' ' << normal_vectors[j][1] << std::endl;
         //normal_vectors[j].normalize();
     }
     return normal_vectors;
