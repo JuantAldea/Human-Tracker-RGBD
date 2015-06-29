@@ -49,8 +49,8 @@ std::vector<cv::Vec3f> detect_circles(const cv::Mat &image)
     vector<Vec3f> circles;
     Mat src_gray;
     cvtColor(image, src_gray, CV_BGR2GRAY);
-    GaussianBlur(src_gray, src_gray, Size(9, 9), 2, 2);
-    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 200, 100, 50, 0);
+    GaussianBlur(src_gray, src_gray, Size(3, 3), 2, 2);
+    HoughCircles(src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 170, 100, 50, 0);
     return circles;
 }
 

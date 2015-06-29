@@ -180,45 +180,120 @@ struct StateEstimation
     }
 };
 
+
+template<typename DEPTH_TYPE>
+void init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame,
+    const vector<Eigen::Vector2f> &shape_model,
+    const ImageRegistration &reg, CImageParticleFilter<DEPTH_TYPE> &particles, StateEstimation &state)
+{
+    state.x = center.x;
+    state.y = center.y;
+    state.z = center_depth;
+    state.v_x = 0;
+    state.v_y = 0;
+    state.v_z = 0;
+    state.score_total = 1;
+    state.score_color = 1;
+    state.score_shape = 1;
+    state.center = center;
+
+    Eigen::Vector2i top_corner, bottom_corner;
+    std::tie(top_corner, bottom_corner) = project_model(
+        Eigen::Vector2f(center.x, center.y),
+        center_depth,
+        Eigen::Vector2f(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS),
+        reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+    const Eigen::Vector2i diagonal_vector = bottom_corner - top_corner;
+    state.radius_x = diagonal_vector[0] * 0.5;
+    state.radius_y = diagonal_vector[1] * 0.5;
+
+
+    state.region = cv::Rect(top_corner[0], top_corner[1], diagonal_vector[0], diagonal_vector[1]);
+    const cv::Mat mask = create_ellipse_mask(state.region, 1);
+    const cv::Mat hsv_roi = hsv_frame(state.region);
+    state.color_model = compute_color_model(hsv_roi, mask);
+
+
+    particles.set_color_model(state.color_model);
+    particles.set_shape_model(shape_model);
+
+    particles.initializeParticles(NUM_PARTICLES,
+        make_pair(center.x, state.radius_x), make_pair(center.y, state.radius_y), make_pair(float(center_depth), 100.f),
+        make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
+        make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS),
+        reg
+    );
+
+    std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << center_depth << std::endl;
+
+    /*
+    {
+        const cv::Mat model2 = compute_color_model(hsv_roi, mask);
+        //CImage model_histogram_image2;
+        //model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
+        //model_histogram_window2.showImage(model_histogram_image2);
+        cout << "SON IGUALES? " << model2.size() << ' ' << model.size() << std::endl;
+        cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(model.type()) << std::endl;
+        cout << "SON IGUALES? " << cv::norm(model2, model) << std::endl;
+        assert(cv::norm(model2, model) == 0);
+    }
+    */
+    /*
+    {
+        const cv::Mat model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
+        const cv::Mat mask = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
+        bitwise_and(color_frame(model_roi), ones, model_frame, mask);
+        CImage model_frame_image;
+        model_frame_image.loadFromIplImage(new IplImage(color_frame(model_roi)));
+        model_image_window.showImage(model_frame_image);
+        CImage model_histogram_image;
+        model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
+        model_histogram_window.showImage(model_histogram_image);
+    }
+    */
+};
+
 template <typename DEPTH_TYPE>
-void do_tracking(StateEstimation &estate, CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particles,
+void do_tracking(StateEstimation &state, CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particles,
     const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats, float &mean_weight)
 {
     PF.executeOn(particles, NULL, &observation, &stats);
-    mean_weight = particles.get_mean(estate.x, estate.y, estate.z, estate.v_x, estate.v_y, estate.v_z);
+    mean_weight = particles.get_mean(state.x, state.y, state.z, state.v_x, state.v_y, state.v_z);
     //cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
     //cout << "Particle filter ESS: " << particles.ESS() << endl;
 }
 
 template <typename DEPTH_TYPE>
-void build_visual_model(StateEstimation &state, const ImageRegistration &reg, const cv::Mat &hsv_frame,
+void build_visual_model(const StateEstimation &old_state, StateEstimation &new_state, const ImageRegistration &reg, const cv::Mat &hsv_frame,
     const cv::Mat &depth_frame)
 {
     Eigen::Vector2i top_corner, bottom_corner;
-    const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(state.y), cvRound(state.x));
-    const double z = center_measured_depth > 0 ? center_measured_depth : state.z; 
-    
-    std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(state.x, state.y), z,
-        Eigen::Vector2f(0.06, 0.06), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-    
-    state.region = cv::Rect(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
-    state.radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
-    state.radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
-    state.center = cv::Point(top_corner[0] + state.radius_x , top_corner[1] + state.radius_y);
+    const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(new_state.y), cvRound(new_state.x));
+    //TODO USE MEAN DEPTH OF THE ELLIPSE
+    const double z = center_measured_depth > 0 ? center_measured_depth : old_state.z;
+
+    std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(new_state.x, new_state.y), z,
+        Eigen::Vector2f(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS), reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+    new_state.region = cv::Rect(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0], bottom_corner[1] - top_corner[1]);
+    new_state.radius_x = (bottom_corner[0] - top_corner[0]) * 0.5;
+    new_state.radius_y = (bottom_corner[1] - top_corner[1]) * 0.5;
+    new_state.center = cv::Point(top_corner[0] + new_state.radius_x , top_corner[1] + new_state.radius_y);
 
     // test whether the estimated roi lies inside of the image frame or not
     const cv::Rect rectangle_image = cv::Rect(0, 0, hsv_frame.cols, hsv_frame.rows);
-    const cv::Rect rectangle_image_roi_intersection = rectangle_image & state.region;
-    
-    if (state.region.area() == rectangle_image_roi_intersection.area()){
-        const cv::Mat mask = create_ellipse_mask(state.region, 1);
-        cv::Mat hsv_roi = hsv_frame(state.region);
-        state.color_model = compute_color_model(hsv_roi, mask);
+    const cv::Rect rectangle_image_roi_intersection = rectangle_image & new_state.region;
+
+    if (new_state.region.area() == rectangle_image_roi_intersection.area()){
+        const cv::Mat mask = create_ellipse_mask(new_state.region, 1);
+        cv::Mat hsv_roi = hsv_frame(new_state.region);
+        new_state.color_model = compute_color_model(hsv_roi, mask);
     }
 }
 
 template <typename DEPTH_TYPE>
-void score_visual_model(StateEstimation &state, const CImageParticleFilter<DEPTH_TYPE> &particles, const cv::Mat &gradient_vectors)
+void score_visual_model(StateEstimation &state, const CImageParticleFilter<DEPTH_TYPE> &particles, const cv::Mat &gradient_vectors, const std::vector<Eigen::Vector2f> &shape_model)
 {
     if (state.color_model.empty()){
         state.score_total = -1;
@@ -228,7 +303,7 @@ void score_visual_model(StateEstimation &state, const CImageParticleFilter<DEPTH
     }
 
     state.score_color = 1 - cv::compareHist(state.color_model, particles.color_model, CV_COMP_BHATTACHARYYA);
-    state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), nullptr);
+    state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y, shape_model, gradient_vectors, cv::Mat(), nullptr);
     state.score_total = state.score_color * state.score_shape;
 }
 
@@ -289,7 +364,6 @@ int particle_filter()
     ImageRegistration reg;
     reg.init(calib_path, serial);
 
-
     /*
     struct sigaction sigIntHandler;
 
@@ -310,7 +384,6 @@ int particle_filter()
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
-    cv::Mat model_frame;
     cv::Mat depth_frame;
 
     randomGenerator.randomize();
@@ -330,8 +403,7 @@ int particle_filter()
 
     // -------------------3D view stuff------------------
 
-//#define _3D
-#ifdef _3D
+#ifdef VIEW_3D
     CDisplayWindow3D win3D("Kinect 3D view", 640, 480);
 
     win3D.setCameraAzimuthDeg(0);
@@ -375,16 +447,10 @@ int particle_filter()
     CParticleFilter PF;
     PF.m_options = PF_options;
 
-    using DEPTH_TYPE = uint16_t;
-    CImageParticleFilter<DEPTH_TYPE> particles;
-
-    bool init_model = true;
-    /*
-    float x_radius_global;
-    float y_radius_global;
-    float x_global;
-    float y_global;
-    */
+    std::vector<CImageParticleFilter<DEPTH_TYPE>> trackers;
+    std::vector<StateEstimation> states;
+    std::vector<StateEstimation> new_states;
+    const std::vector<Eigen::Vector2f> ellipse_normals = calculate_ellipse_normals(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS, ELLIPSE_FITTING_ANGLE_STEP);
     while (!mrpt::system::os::kbhit()) {
         listener->waitForNewFrame(frames_kinect2);
         libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
@@ -419,12 +485,8 @@ int particle_filter()
 
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
-        
-        //color_frame = registered_color_mat;
 
         // Process with PF:
-
-        //TODO: USE CObservationStereoImages?
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
         CObservationImagePtr obsImage_depth = CObservationImage::Create();
@@ -445,7 +507,7 @@ int particle_filter()
 
         obsImage_gradient_magnitude->image.loadFromIplImage(new IplImage(gradient_magnitude));
         obsImage_gradient_magnitude->sensorLabel = "gradient_magnitude";
-        
+
         // memory freed by SF.
         CSensoryFrame observation;
         observation.insert(obsImage_color);
@@ -454,116 +516,116 @@ int particle_filter()
         observation.insert(obsImage_gradient_vectors);
         observation.insert(obsImage_gradient_magnitude);
 
-        /*
-        double min, max;
-        cv::minMaxLoc(depth_frame, &min, &max);
-        cv::Mat depth_frame_normalized = (depth_frame * 255)/ max;
-        cv::Mat gradient_depth = sobel_operator(depth_frame_normalized);
-        cv::Mat gradient_depth_8UC1 = cv::Mat(depth_frame.size(), CV_8UC1);
 
-        CImage gradient_depth_image;
-        gradient_depth_image.loadFromIplImage(new IplImage(gradient_depth));
-        gradient_depth_window.showImage(gradient_depth_image);
+        std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
+
+        /*
+        std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame);
+        for (auto &cara : caras){
+            circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
+        }
         */
 
-        if (init_model) {
-            std::vector<cv::Vec3f> circles = viola_faces::detect_circles(color_frame);
-
-            /*
-            std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame);
-            for (auto &cara : caras){
-                circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
-            }
-            */
-
-            if (circles.size() == 0) {
-                continue;
-            }
-
+        if (circles.size() != 0) {
             int circle_max = 0;
             double radius_max = circles[0][2];
             for (size_t i = 0; i < circles.size(); i++) {
                 cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
                 int radius = cvRound(circles[i][2]);
-                cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                cv::circle(color_display_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
+                //cv::circle(color_display_frame, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                //cv::circle(color_display_frame, center, radius, cv::Scalar(0, 0, 255), 3, 8, 0);
                 if (radius_max < radius) {
                     radius_max = radius;
                     circle_max = i;
                 }
             }
+            std::cout << "CIRCLE FOUND " << circles.size() << std::endl;
 
             cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
             //int radius_2d = cvRound(circles[circle_max][2]);
-            
+
             const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x));
             if (center_depth == 0){
                 continue;
             }
-            
-            Eigen::Vector2i top_corner, bottom_corner;
-            std::tie(top_corner, bottom_corner) = project_model(
-                Eigen::Vector2f(center.x, center.y),
-                center_depth,
-                Eigen::Vector2f(0.06, 0.06),
-                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
-            float x_radius = (bottom_corner - top_corner)[0] * 0.5;
-            float y_radius = (bottom_corner - top_corner)[1] * 0.5;
+            auto already_tracked = [&](const float distance){
+                if (states.empty()){
+                    return false;
+                }
 
-            const cv::Rect model_roi(top_corner[0], top_corner[1],
-                bottom_corner[0] - top_corner[0],
-                bottom_corner[1] - top_corner[1]
-            );
+                const float squared_distance = distance * distance;
+                for (size_t i = 0; i < states.size(); i++){
+                    const StateEstimation &state = states[i];
+                    const float d_x = state.x - center.x;
+                    const float d_y = state.y - center.y;
+                    const float d_x_squared = d_x * d_x;
+                    const float d_y_squared = d_y * d_y;
+                    if (d_x_squared + d_y_squared < squared_distance) {
+                        return true;
+                    }
+                }
+                return false;
+            };
 
-            const cv::Mat mask = create_ellipse_mask(model_roi, 1);
-            const cv::Mat hsv_roi = hsv_frame(model_roi);
-            const cv::Mat model = compute_color_model(hsv_roi, mask);
-            
-            /*
-            { 
-                const cv::Mat model2 = compute_color_model(hsv_roi, mask);
-                //CImage model_histogram_image2;
-                //model_histogram_image2.loadFromIplImage(new IplImage(histogram_to_image(model2, 10)));
-                //model_histogram_window2.showImage(model_histogram_image2);
-                cout << "SON IGUALES? " << model2.size() << ' ' << model.size() << std::endl;
-                cout << "SON IGUALES? " << type2str(model2.type()) << ' ' << type2str(model.type()) << std::endl;
-                cout << "SON IGUALES? " << cv::norm(model2, model) << std::endl;
-                assert(cv::norm(model2, model) == 0);
+            if (!already_tracked(100)){
+                trackers.push_back(CImageParticleFilter<DEPTH_TYPE>());
+                states.push_back(StateEstimation());
+                new_states.push_back(StateEstimation());
+                init_tracking(center, center_depth, hsv_frame, ellipse_normals, reg, trackers.back(), states.back());
             }
-            */
+        }
 
-            particles.update_color_model(model);
+        const size_t N = trackers.size();
 
-            std::cout << "MEAN detected circle: " << center.x << ' ' << center.y << ' ' << depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x)) << std::endl;
-            particles.initializeParticles(NUM_PARTICLES,
-                make_pair(center.x, x_radius), make_pair(center.y, y_radius), make_pair(float(depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x))), 100.f),
-                make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                make_pair(0.12, 0.12),
-                reg
-            );
+        std::cout << "TRACKERS " << N << std::endl;
 
-            init_model = false;
-
-            model_frame = cv::Mat(color_frame(model_roi).size(), color_frame.type());
-            const cv::Mat ones = cv::Mat::ones(color_frame(model_roi).size(), color_frame(model_roi).type());
-            bitwise_and(color_frame(model_roi), ones, model_frame, mask);
-
-            CImage model_frame;
-            model_frame.loadFromIplImage(new IplImage(color_frame(model_roi)));
-            model_image_window.showImage(model_frame);
-            CImage model_histogram_image;
-            model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(particles.color_model, 10)));
-            model_histogram_window.showImage(model_histogram_image);
-        } else {
-            StateEstimation estimated_state;
+        // tracking
+        for (size_t i = 0; i < N; i++){
+            CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
+            StateEstimation &estimated_new_state = new_states[i];
+            const StateEstimation &estimated_state = states[i];
             static CParticleFilter::TParticleFilterStats stats;
-            
             float mean_weight;
-            do_tracking(estimated_state, PF, particles, observation, stats, mean_weight);
-            build_visual_model<DEPTH_TYPE>(estimated_state, reg, hsv_frame, depth_frame);
+            do_tracking(estimated_new_state, PF, particles, observation, stats, mean_weight);
+            build_visual_model<DEPTH_TYPE>(estimated_state, estimated_new_state, reg, hsv_frame, depth_frame);
+            score_visual_model(estimated_new_state, particles, gradient_vectors, ellipse_normals);
+            particles.last_time = cv::getTickCount();
+        }
 
-            CImage model_candidate;
+        // tracking evaluation & update
+        for (size_t i = 0; i < N; i++){
+            const StateEstimation &estimated_new_state = new_states[i];
+            CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
+            StateEstimation &estimated_state = states[i];
+
+            if (estimated_new_state.score_total > LIKEHOOD_FOUND){
+                estimated_state = estimated_new_state;
+            }
+
+            if (estimated_new_state.score_total > LIKEHOOD_UPDATE){
+                particles.set_color_model(estimated_new_state.color_model);
+            }
+        }
+
+
+        //tracking visualization
+        for (size_t i = 0; i < N; i++){
+            const CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
+            const StateEstimation &estimated_state = states[i];
+
+            if (estimated_state.score_total > LIKEHOOD_FOUND){
+                cv::circle(color_display_frame, estimated_state.center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
+                cv::circle(color_display_frame, estimated_state.center, (estimated_state.radius_x + estimated_state.radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
+            }
+
+            if (estimated_state.score_total > LIKEHOOD_UPDATE){
+                cv::circle(color_display_frame, estimated_state.center, 3, cv::Scalar(255, 255, 255), -1, 8, 0);
+                cv::circle(color_display_frame, estimated_state.center, (estimated_state.radius_x + estimated_state.radius_y) * 0.5, cv::Scalar(255, 255, 255), 3, 8, 0);
+            }
+
+
+            /*
             model_candidate.loadFromIplImage(new IplImage(color_frame(estimated_state.region)));
             //model_candidate.loadFromIplImage(new IplImage(w_mask_img));
             model_candidate_window.showImage(model_candidate);
@@ -571,30 +633,7 @@ int particle_filter()
             CImage model_candidate_histogram_image;
             model_candidate_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(estimated_state.color_model, 10)));
             model_candidate_histogram_window.showImage(model_candidate_histogram_image);
-
-            score_visual_model(estimated_state, particles, gradient_vectors);
-
-            //std::cout << "MEAN " << mean_weight << " " << estimated_state.x << ' ' << estimated_state.y << ' ' << estimated_state.z << ' ';
-            //std::cout << estimated_state.v_x << ' ' << estimated_state.v_y << ' ' << estimated_state.v_z << std::endl;
-            //std::cout << "SCORE: " << estimated_state.score_total <<  " " << estimated_state.score_shape << '*' << estimated_state.score_color << std::endl;
-            
-            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 255, 0), 5, 1, 0);
-            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             cv::line(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), cv::Point(estimated_state.x + estimated_state.v_x, estimated_state.y + estimated_state.v_y), cv::Scalar(0, 255, 0), 5, 1, 0);
-            
-            if (estimated_state.score_total > LIKEHOOD_FOUND){
-                cv::circle(color_display_frame, estimated_state.center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-                cv::circle(color_display_frame, estimated_state.center, (estimated_state.radius_x + estimated_state.radius_y) * 0.5, cv::Scalar(0, 0, 255), 3, 8, 0);
-                //cv::circle(gradient_magnitude, center, (radius_x + radius_y) * 0.5 * 1.2, cv::Scalar(128, 128, 128), 3, 8, 0);
-                //cv::circle(gradient_magnitude, center, 3, cv::Scalar(0, 255, 0), -1, 8, 0);
-            }
-
-            if (estimated_state.score_total > LIKEHOOD_UPDATE){
-                CImage model_frame;
-                particles.update_color_model(estimated_state.color_model);
-                model_frame.loadFromIplImage(new IplImage(color_frame(estimated_state.region)));
-                model_image_window.showImage(model_frame);
-            }
 
             {
                 std::ostringstream oss;
@@ -602,11 +641,11 @@ int particle_filter()
                 oss << "BHAT: " << estimated_state.score_color << " ";
                 oss << "SHAPE: " << estimated_state.score_shape << " ";
                 const cv::Point frame_center(gradient_magnitude.cols * 0.5 , gradient_magnitude.rows * 0.5);
-                
-                float fitting_magnitude = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, gradient_magnitude, &color_display_frame);
-                float fitting_01 = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
-                ellipse_contour_test(estimated_state.center, estimated_state.radius_x, estimated_state.radius_y, ELLIPSE_FITTING_ANGLE_STEP, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
-                
+
+                float fitting_magnitude = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ellipse_normals, gradient_vectors, gradient_magnitude, &color_display_frame);
+                float fitting_01 = ellipse_contour_test(frame_center, estimated_state.radius_x, estimated_state.radius_y, ellipse_normals, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+                ellipse_contour_test(estimated_state.center, estimated_state.radius_x, estimated_state.radius_y, ellipse_normals, gradient_vectors, cv::Mat(), &gradient_magnitude_scaled);
+
                 oss << "SHAPE CENTER: " << fitting_01<< " (" << fitting_magnitude << ")";
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
                 double fontScale = 2;
@@ -618,30 +657,28 @@ int particle_filter()
                 //cv::Point textOrg(textSize.width, textSize.height);
                 putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
             }
-        }
+            */
 
-        particles.last_time = cv::getTickCount();
-
-        size_t N = particles.m_particles.size();
-
-
-        for (size_t i = 0; i < N; i++) {
-            cv::circle(color_display_frame, cv::Point(particles.m_particles[i].d->x,
-                                              particles.m_particles[i].d->y), 1, cv::Scalar(0, 0, 255), 1, 1, 0);
+            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            cv::circle(color_display_frame, estimated_state.center, 150, cv::Scalar(0, 0, 255), 3, 8, 0);
+            const size_t N_PARTICLES = particles.m_particles.size();
+            for (size_t j = 0; j < N_PARTICLES; j++) {
+                cv::circle(color_display_frame,
+                    cv::Point(particles.m_particles[j].d->x, particles.m_particles[j].d->y), 1, GlobalColorPalette[i], 1, 1, 0);
+            }
         }
 
         cv::line(color_display_frame, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
-
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
         gradient_color_window.showImage(gradient_magnitude_image);
+        CImage color_display_image;
+        color_display_image.loadFromIplImage(new IplImage(color_display_frame));
+        image.showImage(color_display_image);
 
-        CImage frame_particles;
-        frame_particles.loadFromIplImage(new IplImage(color_display_frame));
-        image.showImage(frame_particles);
 
-#ifdef _3D
+#ifdef VIEW_3D
         //--- 3D view stuff
         create_cloud(color_frame, depth_frame, 1.0/1000.0f, reg, scene_points_map);
 

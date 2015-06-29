@@ -56,7 +56,7 @@ class CImageParticleFilter :
 {
 
 public:
-    
+
     using ParticleType = typename decltype(m_particles)::value_type;
 
     void update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation);
@@ -80,13 +80,14 @@ public:
                              const ImageRegistration &registration_data);
 
 
-    void update_color_model(const cv::Mat &model);
+    void set_color_model(const cv::Mat &model);
+    void set_shape_model(const vector<Eigen::Vector2f> &normal_vectors);
     float get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
     void print_particle_state(void) const;
 
     int64_t last_time;
     cv::Mat color_model;
-
+    const vector<Eigen::Vector2f> *shape_model;
 #ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;

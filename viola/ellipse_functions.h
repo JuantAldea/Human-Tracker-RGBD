@@ -67,11 +67,11 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
             */
         }
     }
-    
+
     if (n_dims == 1){
         return mask;
     }
-    
+
     std::vector<cv::Mat> mask_channels(n_dims, mask);
     cv::Mat mask_ndims;
     cv::merge(mask_channels, mask_ndims);
@@ -81,7 +81,7 @@ cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int
 cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, const int n_dims)
 {
     //e(x,y) = b^2*x^2 + a^2*y^2 - a^2*b^2
-    
+
     /*
     from: http://sydney.edu.au/engineering/it/research/tr/tr531.pdf
     from: http://enchantia.com/graphapp/doc/tech/ellipses.html
@@ -106,17 +106,17 @@ cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, con
     long crit2 = -(b2/4.0f + b%2 + a2);
     long crit3 = -(b2/4.0f + b%2);
     // e(x+1/2,y-1/2) - (a^2+b^2)/4
-    long t = -a2*y; 
+    long t = -a2*y;
     long dxt = 2*b2*x, dyt = -2*a2*y;
     long d2xt = 2*b2, d2yt = 2*a2;
     const auto value = cv::Scalar::all(1);
     while (y>=0 && x<=a) {
-        if (t + b2*x <= crit1 || t + a2*y <= crit3) {   
+        if (t + b2*x <= crit1 || t + a2*y <= crit3) {
               //e(x+1,y-1/2) <= 0
               //e(x+1/2,y) <= 0
             incx();
             width += 2;
-        } else if (t - a2*y > crit2) { 
+        } else if (t - a2*y > crit2) {
             //e(x+1/2,y-1) > 0
             //row(xc-x, yc-y, width);
             cv::line(mask, cv::Point(xc-x, yc-y), cv::Point(xc-x+width, yc-y), value);
@@ -141,11 +141,11 @@ cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, con
         //row(xc-a, yc, 2*a+1);
         cv::line(mask, cv::Point(xc-a, yc), cv::Point(xc-a + 2*a+1, yc), value);
     }
-    
+
     if (n_dims == 1){
         return mask;
     }
-    
+
     std::vector<cv::Mat> mask_channels(n_dims, mask);
     cv::Mat mask_ndims;
     cv::merge(mask_channels, mask_ndims);
@@ -203,41 +203,45 @@ inline Eigen::Vector2f calculate_ellipse_orthonormal(const int axis_x, const int
     return normal;
 }
 
-// This function can perform both, gradient magnitude aware and  purely gradient direction evaluation; the second
-// is made by passing an empty matrix as gradient_magnitude parameter.
-float ellipse_contour_test(const cv::Point &center, const float radius_x, const float radius_y, const int angle_step,
-    const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat *output = nullptr)
+std::vector<Eigen::Vector2f> calculate_ellipse_normals(const float radius_x, const float radius_y, const int angle_step)
 {
-    
-    const int total_steps = 360 / angle_step;
-    
-    //TODO THINK ABOUT THIS
-    static std::vector<Eigen::Vector2f> normal_vectors;
-    //normal_vector is static so its only filled one time,
-    //given that ellipses have always the same proportion, one time is enough
-    if (normal_vectors.size() == 0){
-        std::cout  << "DENTRO\n";
-        normal_vectors.resize(total_steps / 4);
-        for (int i = 0, j = 0; i < 90; i += angle_step, j++){
-            normal_vectors[j] = calculate_ellipse_normal(radius_x, radius_y, M_PI * i / 180.0);
-            const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
-            normal_vectors[j] *= inv_modulus;
-            /*
-            Eigen::Vector2f v = normal_vectors[j];
-            v.normalize();
-            */
-        }
+    float min_radius = std::min(radius_x, radius_y);
+    int factor = 1;
+
+    while(min_radius < 1){
+        factor *= 10;
+        min_radius *= factor;
     }
 
+    const float scaled_radius_x = radius_x * factor;
+    const float scaled_radius_y = radius_y * factor;
+
+    const int total_steps = 360 / angle_step;
+    std::vector<Eigen::Vector2f> normal_vectors(total_steps / 4);
+    for (int i = 0, j = 0; i < 90; i += angle_step, j++){
+        normal_vectors[j] = calculate_ellipse_normal(scaled_radius_x, scaled_radius_y, M_PI * i / 180.0);
+        const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] + normal_vectors[j][1] * normal_vectors[j][1]);
+        normal_vectors[j] *= inv_modulus;
+        //normal_vectors[j].normalize();
+    }
+    return normal_vectors;
+}
+
+// This function can perform both, gradient magnitude aware and  purely gradient direction evaluation; the second
+// is made by passing an empty matrix as gradient_magnitude parameter.
+float ellipse_contour_test(const cv::Point &center, const float radius_x, const float radius_y, const std::vector<Eigen::Vector2f> &normal_vectors,
+    const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude, cv::Mat * const output = nullptr)
+{
     const int total_vectors = normal_vectors.size();
     float dot_sum = 0;
     for (int i = 0; i < total_vectors; i++){
         const Eigen::Vector2f &v = normal_vectors[i];
-        
-        const cv::Vec2f v_1(v[0], v[1]);
-        const cv::Vec2f v_2(-v[0], -v[1]);
-        const cv::Vec2f v_3(-v[1], v[0]);
-        const cv::Vec2f v_4(v[1], -v[0]);
+        const float v_x = v[0];
+        const float v_y = v[1];
+        const cv::Vec2f v_1(v_x, v_y);
+        const cv::Vec2f v_2(-v_x, -v_y);
+        const cv::Vec2f v_3(-v_y, v_x);
+        const cv::Vec2f v_4(v_y, -v_x);
 
         const int pixel_coordinates_1_x = center.x + cvRound(v_1[0] * radius_x);
         const int pixel_coordinates_1_y = center.y + cvRound(v_1[1] * radius_y);
@@ -258,12 +262,12 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         const cv::Vec2f &gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2_y, pixel_coordinates_2_x);
         const cv::Vec2f &gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3_y, pixel_coordinates_3_x);
         const cv::Vec2f &gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4_y, pixel_coordinates_4_x);
-        
+
         float magnitude_v1;
         float magnitude_v2;
         float magnitude_v3;
         float magnitude_v4;
-        
+
         if (!gradient_magnitude.empty()){
             magnitude_v1 = gradient_magnitude.at<float>(pixel_coordinates_1_y, pixel_coordinates_1_x);
             magnitude_v2 = gradient_magnitude.at<float>(pixel_coordinates_2_y, pixel_coordinates_2_x);
@@ -275,7 +279,7 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
             magnitude_v3 = 1;
             magnitude_v4 = 1;
         }
-        
+
         const float dot_1 = magnitude_v1 * std::abs(gradient_v1[0] * v_1[0] + gradient_v1[1] * v_1[1]);
         const float dot_2 = magnitude_v2 * std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
         const float dot_3 = magnitude_v3 * std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
@@ -285,9 +289,9 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         const float dot_2 = std::abs(gradient_v2[0] * v_2[0] + gradient_v2[1] * v_2[1]);
         const float dot_3 = std::abs(gradient_v3[0] * v_3[0] + gradient_v3[1] * v_3[1]);
         const float dot_4 = std::abs(gradient_v4[0] * v_4[0] + gradient_v4[1] * v_4[1]);
-*/    
+*/
         dot_sum += dot_1 + dot_2 + dot_3 + dot_4;
-        
+
         if (unlikely(output != nullptr)){
             const cv::Point pixel_coordinates_1 = center + cv::Point(cvRound(v_1[0] * radius_x), cvRound(v_1[1] * radius_y));
             const cv::Point pixel_coordinates_2 = center + cv::Point(cvRound(v_2[0] * radius_x), cvRound(v_2[1] * radius_y));
@@ -308,7 +312,7 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
             const cv::Point end_2(pixel_coordinates_2 + cv::Point(cvRound(gradient_v2[0] * 10), cvRound(gradient_v2[1] * 10)));
             const cv::Point end_3(pixel_coordinates_3 + cv::Point(cvRound(gradient_v3[0] * 10), cvRound(gradient_v3[1] * 10)));
             const cv::Point end_4(pixel_coordinates_4 + cv::Point(cvRound(gradient_v4[0] * 10), cvRound(gradient_v4[1] * 10)));
-            
+
             cv::arrowedLine(*output, pixel_coordinates_1, end_1, cv::Scalar(180, 180, 180), 1, 8, 0);
             cv::arrowedLine(*output, pixel_coordinates_2, end_2, cv::Scalar(180, 180, 180), 1, 8, 0);
             cv::arrowedLine(*output, pixel_coordinates_3, end_3, cv::Scalar(180, 180, 180), 1, 8, 0);
@@ -316,5 +320,5 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         }
     }
 
-    return dot_sum / total_steps;
+    return dot_sum / (total_vectors * 4);
 }

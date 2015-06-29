@@ -31,3 +31,6 @@
 #endif
 
 #cmakedefine USE_KINECT_2 ${USE_KINECT_2}
+
+
+#cmakedefine VIEW_3D ${VIEW_3D}

@@ -50,7 +50,7 @@ float Q_rsqrt(const float number)
     const float x2  = number * 0.5F;
     float y;
     long i;
-    
+
     y = number;
     i  = *(long *)&y;
     i = 0x5f3759df - (i >> 1);
@@ -64,3 +64,42 @@ float Q_rsqrt(const float number)
 #pragma GCC diagnostic pop
 
 
+static const cv::Scalar GlobalColorPalette[] = {
+    cv::Scalar(  0,   0, 255),
+    cv::Scalar(255,   0,   0),
+    cv::Scalar(  0, 255,   0),
+    cv::Scalar(255, 255,   0),
+    cv::Scalar(  0, 255, 255),
+    cv::Scalar(255,   0, 255),
+    cv::Scalar(  0,   0, 128),
+    cv::Scalar(128,   0,   0),
+    cv::Scalar(  0, 128,   0),
+    cv::Scalar(128, 128,   0),
+    cv::Scalar(  0, 128, 128),
+    cv::Scalar(128,   0, 128),
+    cv::Scalar(  0,   0,   0),
+    cv::Scalar(255, 255, 255),
+    cv::Scalar(128, 128, 128),
+    cv::Scalar(160, 164, 160),
+    cv::Scalar(192, 192, 192)
+};
+
+enum class GlobalColorNames  {
+    RED = 0,
+    GREEN,
+    BLUE,
+    CYAN,
+    MAGENTA,
+    YELLOW,
+    DARK_RED,
+    DARK_GREEN,
+    DARK_BLUE,
+    DARK_CYAN,
+    DARK_MAGENTA,
+    DARK_YELLOW,
+    BLACK,
+    WHITE,
+    MEDIUM_GRAY,
+    LIGHT_GRAY_1,
+    LIGHT_GRAY_2,
+};
