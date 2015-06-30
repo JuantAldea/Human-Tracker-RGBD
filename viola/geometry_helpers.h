@@ -10,8 +10,18 @@ IGNORE_WARNINGS_PUSH
 
 IGNORE_WARNINGS_POP
 
+constexpr float bad_value_float = std::numeric_limits<float>::quiet_NaN();
+constexpr int bad_value_int = std::numeric_limits<int>::quiet_NaN();
 
+const Eigen::Vector3f bad_point_3D_float = Eigen::Vector3f(bad_value_float, bad_value_float, bad_value_float);
+const Eigen::Vector2i bad_point_2D_int = Eigen::Vector2i(bad_value_int, bad_value_int);
+const std::tuple<Eigen::Vector2i, Eigen::Vector2i> bad_point_pair_2D_int = std::make_tuple(bad_point_2D_int, bad_point_2D_int);
 
+/*
+constexpr Eigen::Vector2f bad_point_2D_float = Eigen::Vector2f(bad_value_float, bad_value_float);
+
+constexpr Eigen::Vector3i bad_point_3D_int = Eigen::Vector3f(bad_value_int, bad_value_int, bad_value_int);
+*/
 ////////////////////
 
 inline Eigen::Vector3f point_3D_reprojection(const float x, const float y, const float depth, const float inv_fx, const float inv_fy, const float cx, const float cy);
@@ -37,18 +47,17 @@ std::tuple<Eigen::Vector2i, Eigen::Vector2i> project_model(const Eigen::Vector2f
 
 inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const float x, const float y, const float depth, const double inv_fx, const double inv_fy, const float cx, const float cy)
 {
-    static const float badPoint = std::numeric_limits<float>::quiet_NaN();
-    if (std::abs(depth) < 0.001){
-        return Eigen::Vector3f(badPoint, badPoint, badPoint);
+    if (unlikely(std::abs(depth) < 0.001)){
+        return bad_point_3D_float;
     }
+
     return Eigen::Vector3f((x - cx) * depth * inv_fx, (y - cy) * depth * inv_fy, depth);
 }
 
 inline Eigen::Vector3f pixel_depth_to_3D_coordiantes(const Eigen::Vector2f &v, const float depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
-    static const float badPoint = std::numeric_limits<float>::quiet_NaN();
-    if (std::abs(depth) < 0.001){
-        return Eigen::Vector3f(badPoint, badPoint, badPoint);
+    if (unlikely(std::abs(depth) < 0.001)){
+        return bad_point_3D_float;
     }
 
     return pixel_depth_to_3D_coordiantes(v[0], v[1], depth, inv_fx, inv_fy, cx, cy);
@@ -76,7 +85,7 @@ inline std::vector<Eigen::Vector3f> pixel_depth_to_3D_coordiantes(const std::vec
 {
     const size_t N = xyd_vectors.size();
     std::vector<Eigen::Vector3f> coordinates_3D(N);
-    
+
     auto loop_body_lambda = [&](const int i){
         const Eigen::Vector3f &v = xyd_vectors[i];
         coordinates_3D[i] = pixel_depth_to_3D_coordiantes(v[0], v[1], v[2], inv_fx, inv_fy, cx, cy);
@@ -111,7 +120,7 @@ template<typename DEPTH_TYPE>
 cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
     cv::Mat reprojection = cv::Mat(depth.size(), depth.type());
-    
+
     auto depth_3D_reprojection_lambda = [&](const int x){
         const DEPTH_TYPE *p_depth = depth.ptr<DEPTH_TYPE>(x);
         cv::Vec3f *p_reprojection = reprojection.ptr<cv::Vec3f>(x);
@@ -144,21 +153,21 @@ cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const fl
  // Reprojection with mappings //
 ////////////////////////////////
 
+//TODO float depth templated?
 inline Eigen::Vector3f point_3D_reprojection (const Eigen::Vector2f &v, const float depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
 {
-    static const float badPoint = std::numeric_limits<float>::quiet_NaN();
     const float x = lookupX.at<float>(0, v[0]);
     const float y = lookupY.at<float>(0, v[1]);
-    register const float depthValue = depth / 1000.0f;
+    register const float depth_metters = depth / 1000.0f;
 
     // Check for invalid measurements
-    if (isnan(depthValue) || depthValue <= 0.001) {
-        return Eigen::Vector3f(badPoint, badPoint, badPoint);
+    if (unlikely(isnan(depth_metters) || depth_metters <= 0.001)) {
+        return bad_point_3D_float;
     }
-    
-    const float z_coord = depthValue;
-    const float x_coord = x * depthValue;
-    const float y_coord = y * depthValue;
+
+    const float z_coord = depth_metters;
+    const float x_coord = x * depth_metters;
+    const float y_coord = y * depth_metters;
 
     return Eigen::Vector3f(x_coord, y_coord, z_coord);
 }
@@ -208,17 +217,16 @@ std::vector<Eigen::Vector3f> points_3D_reprojection(const std::vector<Eigen::Vec
      for (int i = 0; i < N; i++) {
         reprojected_points[i] = point_3D_reprojection<DEPTH_TYPE>(vectors[i], depth, lookupX, lookupY);
     }
-#endif    
+#endif
     return reprojected_points;
 }
 
 inline Eigen::Vector2i point_3D_projection(const Eigen::Vector3f &v, const float fx, const float fy, const float cx, const float cy)
 {
-    static const int badPoint = std::numeric_limits<int>::quiet_NaN();
-    if (std::abs(v[2]) < 0.001){
-        return Eigen::Vector2i(badPoint, badPoint);
+    if (unlikely(std::abs(v[2]) < 0.001)){
+        return bad_point_2D_int;
     }
- 
+
     const float inv_z = 1.0 / v[2];
     return Eigen::Vector2i(cvRound(fx * v[0] * inv_z + cx), cvRound(fy * v[1] * inv_z + cy));
 }
@@ -233,36 +241,32 @@ inline std::tuple<Eigen::Vector2i, Eigen::Vector2i> project_model(const Eigen::V
 std::tuple<Eigen::Vector2i, Eigen::Vector2i> project_model(const Eigen::Vector2f &model_center, const float depth, const Eigen::Vector2f &model_semi_axis_lengths,
     const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY)
 {
-    static const int badPoint = std::numeric_limits<int>::quiet_NaN();
-    if (std::abs(depth) < 0.001){
-        auto nan_v = Eigen::Vector2i(badPoint, badPoint);
-        return std::make_tuple(nan_v, nan_v);
+    if (unlikely(std::abs(depth) < 0.001)){
+        return bad_point_pair_2D_int;
     }
 
-    const Eigen::Vector3f circle_center_3d = point_3D_reprojection(Eigen::Vector2f(model_center[0], model_center[1]), depth, lookupX, lookupY);
-    const Eigen::Vector3f circle_left_top_corner_3d = circle_center_3d + Eigen::Vector3f(-model_semi_axis_lengths[0], -model_semi_axis_lengths[1], 0);
-    const Eigen::Vector3f circle_left_bottom_corner_3d = circle_center_3d + Eigen::Vector3f(model_semi_axis_lengths[0], model_semi_axis_lengths[1], 0);
+    const Eigen::Vector3f model_center_3d = point_3D_reprojection(Eigen::Vector2f(model_center[0], model_center[1]), depth, lookupX, lookupY);
+    const Eigen::Vector3f model_left_top_corner_3d = model_center_3d + Eigen::Vector3f(-model_semi_axis_lengths[0], -model_semi_axis_lengths[1], 0);
+    const Eigen::Vector3f model_left_bottom_corner_3d = model_center_3d + Eigen::Vector3f(model_semi_axis_lengths[0], model_semi_axis_lengths[1], 0);
 
     const float fx = cameraMatrix.at<double>(0, 0);
     const float fy = cameraMatrix.at<double>(1, 1);
     const float cx = cameraMatrix.at<double>(0, 2);
     const float cy = cameraMatrix.at<double>(1, 2);
-    
-    const Eigen::Vector2i top_corner = point_3D_projection(circle_left_top_corner_3d, fx, fy, cx, cy);
-    const Eigen::Vector2i bottom_corner = point_3D_projection(circle_left_bottom_corner_3d, fx, fy, cx, cy);
-    
-    //cout << "circle " << center_x << ' ' << center_y << " radius2d " << radius_2d << " radius 3d " <<  (x_radius + y_radius) * 0.5 << " radius x "<< x_radius << " radius y " << y_radius << std::endl;
-    
-    if (top_corner[0] < 0 || top_corner[1] < 0 || bottom_corner[0] < 0 || bottom_corner[1] < 0){
-        auto nan_v = Eigen::Vector2i(badPoint, badPoint);
-        return std::make_tuple(nan_v, nan_v);
+
+    const Eigen::Vector2i top_corner = point_3D_projection(model_left_top_corner_3d, fx, fy, cx, cy);
+    const Eigen::Vector2i bottom_corner = point_3D_projection(model_left_bottom_corner_3d, fx, fy, cx, cy);
+
+    //std::cout << "model " << model_center_3d[0] << ' ' << model_center_3d[1] << std::endl;
+
+    if (unlikely(top_corner[0] < 0 || top_corner[1] < 0 || bottom_corner[0] < 0 || bottom_corner[1] < 0)){
+        return bad_point_pair_2D_int;
     }
 
-    if (top_corner[0] > bottom_corner[0] || top_corner[1] > bottom_corner[1]){
-        auto nan_v = Eigen::Vector2i(badPoint, badPoint);
-        return std::make_tuple(nan_v, nan_v);
+    if (unlikely(top_corner[0] > bottom_corner[0] || top_corner[1] > bottom_corner[1])){
+        return bad_point_pair_2D_int;
     }
-    
+
     return std::make_tuple(top_corner, bottom_corner);
 }
 

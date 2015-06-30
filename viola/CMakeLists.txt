@@ -88,24 +88,38 @@ ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 #ADD_EXECUTABLE(objectDetection  objectDetection.cpp)
 #ADD_EXECUTABLE(openni_capture openni_capture.cpp)
 #ADD_EXECUTABLE(hog peopledetect.cpp)
+ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
 
 FIND_PACKAGE(OpenCL REQUIRED)
+find_package(Boost REQUIRED system serialization)
 
 TARGET_LINK_LIBRARIES(ImageRegistration
     ${DEPTH_REGISTRATION_LIBRARY}
 )
 
+include_directories(${Boost_INCLUDE_DIRS})
+TARGET_LINK_LIBRARIES(model_projections_precalculator
+    ImageRegistration
+    EllipseFunctions
+    GeometryHelpers
+    MiscHelpers
+    ${MRPT_LIBS}
+    ${OpenCV_LIBS}
+    ${Boost_LIBRARIES}
+)
+
+
 TARGET_LINK_LIBRARIES(particle_filter_main
-     ImageParticleFilter
-     FacesDetection
-     ${MRPT_LIBS}
-     ${OpenCV_LIBS}
-     ${TBB_LIBRARIES}
-     ${freenect2_LIBRARY}
-     ${OpenCL_LIBRARIES}
-     ${DEPTH_REGISTRATION_LIBRARY}
-     ImageRegistration
-     EllipseFunctions
+    ImageParticleFilter
+    FacesDetection
+    ${MRPT_LIBS}
+    ${OpenCV_LIBS}
+    ${TBB_LIBRARIES}
+    ${freenect2_LIBRARY}
+    ${OpenCL_LIBRARIES}
+    ${DEPTH_REGISTRATION_LIBRARY}
+    ImageRegistration
+    EllipseFunctions
     ColorModel
     GeometryHelpers
     MiscHelpers

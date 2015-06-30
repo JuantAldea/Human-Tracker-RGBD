@@ -28,7 +28,6 @@ IGNORE_WARNINGS_PUSH
 
 IGNORE_WARNINGS_POP
 
-//#include "KinectCamera.h"
 #include "CImageParticleFilter.h"
 #include "misc_helpers.h"
 #include "geometry_helpers.h"
@@ -670,6 +669,46 @@ int particle_filter()
 
         cv::line(color_display_frame, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
+
+        {
+            const cv::Point frame_center(gradient_magnitude.cols * 0.5 , gradient_magnitude.rows * 0.5);
+            float depth = depth_frame.at<DEPTH_TYPE>(frame_center.y, frame_center.x);
+            std::cout << "CENTER DEPTH: "  << depth << std::endl;
+            Eigen::Vector2i top_corner, bottom_corner;
+            std::tie(top_corner, bottom_corner) = project_model(
+                Eigen::Vector2f(frame_center.x, frame_center.y),
+                depth,
+                //Eigen::Vector2f(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS),
+                //Eigen::Vector2f(PERSON_TORSO_X_SEMIAXIS_METTERS, PERSON_TORSO_Y_SEMIAXIS_METTERS),
+                Eigen::Vector2f(PERSON_HEAD_X_SEMIAXIS_METTERS, PERSON_HEAD_Y_SEMIAXIS_METTERS),
+                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+            const Eigen::Vector2i diagonal_vector = bottom_corner - top_corner;
+            int radius_x = cvRound(diagonal_vector[0] * 0.5);
+            int radius_y = cvRound(diagonal_vector[1] * 0.5);
+            //cv::circle(color_display_frame, frame_center, radius_x, cv::Scalar(0, 0, 255), 3, 8, 0);
+            cv::ellipse(color_display_frame, frame_center, cv::Size(radius_x, radius_y), 0, 0, 360, cv::Scalar(0, 0, 255), 3, 8, 0);
+
+            {
+                std::ostringstream oss;
+                oss << "DEPTH:" << depth << " ";
+                oss << "AXIS X: " << radius_x << " ";
+                oss << "AXIS Y: " << radius_y << " ";
+
+                int fontFace =  cv::FONT_HERSHEY_PLAIN;
+                double fontScale = 2;
+                int thickness = 2;
+
+                int baseline = 0;
+                cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
+                cv::Point textOrg(0, textSize.height + 10);
+                //cv::Point textOrg(textSize.width, textSize.height);
+                putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+            }
+
+        }
+
+
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
         gradient_color_window.showImage(gradient_magnitude_image);
