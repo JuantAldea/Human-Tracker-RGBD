@@ -291,6 +291,12 @@ int particle_filter()
     for (int z = 0; z < 5000; z++){
         ellipses.get_ellipse(BodyPart::HEAD, z);
     }
+    /*
+    for (int z = 0; z < 5000; z++){
+        ellipses.get_ellipse(BodyPart::TORSO, z);
+    }
+    */
+
     while (!mrpt::system::os::kbhit()) {
         // Adquisition
         listener->waitForNewFrame(frames_kinect2);
