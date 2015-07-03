@@ -10,10 +10,10 @@ SET(CMAKE_CXX_STANDARD 11)
 
 #SET(CMAKE_CXX_FLAGS_DEBUG "${viola_SOURCE_DIR} -ggdb3 -O0 -pg -std=c++11 -fbuiltin -fno-inline")
 #SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} --fast-math -O3 -flto")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=c++11 -pg -fbuiltin")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin")
 
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=c++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
-#SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
+SET(CMAKE_EXE_LINKER_FLAGS "-pg")
 
 FIND_PACKAGE(PkgConfig QUIET)
 
@@ -100,16 +100,24 @@ ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 #ADD_EXECUTABLE(objectDetection  objectDetection.cpp)
 #ADD_EXECUTABLE(openni_capture openni_capture.cpp)
 #ADD_EXECUTABLE(hog peopledetect.cpp)
-ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
+#ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
+#ADD_EXECUTABLE(Boost-normal Boost-normal.cpp)
 
 FIND_PACKAGE(OpenCL REQUIRED)
 find_package(Boost REQUIRED system serialization)
+include_directories(${Boost_INCLUDE_DIRS})
 
 TARGET_LINK_LIBRARIES(ImageRegistration
     ${DEPTH_REGISTRATION_LIBRARY}
 )
 
-include_directories(${Boost_INCLUDE_DIRS})
+#[[
+TARGET_LINK_LIBRARIES(Boost-normal
+    ${Boost_LIBRARIES}
+)
+]]
+
+#[[
 TARGET_LINK_LIBRARIES(model_projections_precalculator
     ImageRegistration
     EllipseFunctions
@@ -119,6 +127,7 @@ TARGET_LINK_LIBRARIES(model_projections_precalculator
     ${OpenCV_LIBS}
     ${Boost_LIBRARIES}
 )
+]]
 
 
 TARGET_LINK_LIBRARIES(particle_filter_main

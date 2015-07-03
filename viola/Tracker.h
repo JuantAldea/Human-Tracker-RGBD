@@ -5,8 +5,7 @@
 
 template<typename DEPTH_TYPE>
 bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame,
-                   const vector<Eigen::Vector2f> &shape_model,
-                   const ImageRegistration &reg, CImageParticleFilter<DEPTH_TYPE> &particles,
+                   const vector<Eigen::Vector2f> &shape_model, CImageParticleFilter<DEPTH_TYPE> &particles,
                    StateEstimation &state, EllipseStash &ellipses)
 {
     state.x = center.x;
@@ -35,13 +34,12 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     particles.set_shape_model(shape_model);
     particles.last_distance = state.z;
 
-    particles.initializeParticles(NUM_PARTICLES,
+    particles.init_particles(NUM_PARTICLES,
                                   make_pair(state.x, state.radius_x), make_pair(state.y, state.radius_y),
                                   make_pair(float(state.z), 100.f),
                                   make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS),
-                                  reg, &ellipses
-                                 );
+                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS));
+
     std::cout << "MEAN detected circle: " << state.x << ' ' << state.y << ' ' << state.z << std::endl;
 
     /*
@@ -145,7 +143,7 @@ void score_visual_model(StateEstimation &state,
         return;
     }
 
-    state.score_color = 1 - cv::compareHist(state.color_model, particles.color_model,
+    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_color_model(),
                                             CV_COMP_BHATTACHARYYA);
     state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y,
                         shape_model, gradient_vectors, cv::Mat(), nullptr);

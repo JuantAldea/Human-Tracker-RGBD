@@ -1,13 +1,14 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
-
+#include <boost/math/distributions/normal.hpp>
 #include "StateEstimation.h"
 #include "Tracker.h"
 
 template <typename DEPTH_TYPE>
 struct MultiTracker {
     ImageRegistration reg;
+    boost::math::normal_distribution<float> depth_distribution;
     std::vector<CImageParticleFilter<DEPTH_TYPE>> trackers;
     std::vector<StateEstimation> states;
     std::vector<StateEstimation> new_states;
@@ -15,6 +16,7 @@ struct MultiTracker {
 
     MultiTracker(const ImageRegistration &ir) :
         reg(ir),
+        depth_distribution(0, DEPTH_SIGMA),
         ellipse_normals(calculate_ellipse_normals(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS,
                         ELLIPSE_FITTING_ANGLE_STEP))
     {
@@ -43,6 +45,10 @@ struct MultiTracker {
             return false;
         };
 
+        if (states.size()){
+            return;
+        }
+
         if (already_tracked(100)) {
             return;
         }
@@ -58,10 +64,10 @@ struct MultiTracker {
             return;
         }
 
-        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>());
+        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, &reg, &depth_distribution));
         states.push_back(StateEstimation());
         new_states.push_back(StateEstimation());
-        init_tracking<DEPTH_TYPE>(center, center_depth, hsv_frame, ellipse_normals, reg,
+        init_tracking<DEPTH_TYPE>(center, center_depth, hsv_frame, ellipse_normals,
                                   trackers.back(), states.back(), ellipses);
     };
 
@@ -85,7 +91,7 @@ struct MultiTracker {
         }
     };
 
-    void update()
+    void update(EllipseStash &ellipses)
     {
         const size_t N = trackers.size();
         for (size_t i = 0; i < N; i++) {
@@ -93,13 +99,15 @@ struct MultiTracker {
             CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
             StateEstimation &estimated_state = states[i];
             const float score = estimated_new_state.score_total;
+
             if (score > LIKEHOOD_FOUND) {
-                estimated_state = estimated_new_state;
-                particles.set_color_model(estimated_state.color_model);
-                cv::Mat blended_color_model(particles.color_model.rows, particles.color_model.cols, particles.color_model.type());
-                //blended_color_model = estimated_new_state.color_model;
+                cv::Mat blended_color_model(estimated_state.color_model.rows, estimated_state.color_model.cols, estimated_state.color_model.type());
                 cv::addWeighted(estimated_state.color_model, 1 - score, estimated_new_state.color_model, score, 0, blended_color_model);
-                estimated_new_state.color_model = blended_color_model;
+                //estimated_new_state.color_model = blended_color_model;
+                estimated_state = estimated_new_state;
+                estimated_state.color_model = blended_color_model;
+                particles.set_color_model(estimated_state.color_model);
+                //blended_color_model = estimated_new_state.color_model;
                 particles.last_distance = estimated_state.z;
             }
 
@@ -107,6 +115,16 @@ struct MultiTracker {
             }
 
             if (score < LIKEHOOD_FOUND) {
+                /*
+                particles.init_particles(NUM_PARTICLES,
+                                  make_pair(estimated_state.x, estimated_state.radius_x), make_pair(estimated_state.y, estimated_state.radius_y),
+                                  make_pair(float(estimated_state.z), 100.f),
+                                  make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
+                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS),
+                                  reg, &ellipses
+                                 );
+                estimated_state.factor *= 1.2;
+                */
 
             }
         }
@@ -119,6 +137,7 @@ struct MultiTracker {
             const CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
             //const StateEstimation &estimated_state = new_states[i];
             const StateEstimation &estimated_state = states[i];
+            const StateEstimation &estimated_new_state = new_states[i];
 
             if (estimated_state.score_total > LIKEHOOD_FOUND) {
                 cv::ellipse(color_display_frame, estimated_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(0, 255, 0), -1, 8, 0);
@@ -172,7 +191,9 @@ struct MultiTracker {
 
             {
                 std::ostringstream oss;
+                std::ostringstream oss2;
                 oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color;
+                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape << ' ' << estimated_new_state.score_color;
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
                 double fontScale = 2;
                 int thickness = 2;
@@ -180,13 +201,23 @@ struct MultiTracker {
                 int baseline = 0;
                 cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
                 cv::Point textOrg(estimated_state.x - textSize.width * 0.5f, estimated_state.y - textSize.height * 0.5f);
+                cv::Point textOrg2 = textOrg + cv::Point(0, textSize.height * 1.2);
                 //cv::Point textOrg(textSize.width, textSize.height);
                 putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+                putText(color_display_frame, oss2.str(), textOrg2, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
             }
 
+            double max_w = -100;
             for (size_t j = 0; j < N_PARTICLES; j++) {
+                max_w = max(max_w, particles.m_particles[j].log_w);
+            }
+
+            max_w = exp(max_w);
+
+            for (size_t j = 0; j < N_PARTICLES; j++) {
+                int radius = cvRound(1 + 1.0f/20 * max_w/exp(particles.m_particles[j].log_w) );
                 cv::circle(color_display_frame,
-                           cv::Point(particles.m_particles[j].d->x, particles.m_particles[j].d->y), 1,
+                           cv::Point(particles.m_particles[j].d->x, particles.m_particles[j].d->y), radius,
                            GlobalColorPalette[i], 1, 1, 0);
             }
         }

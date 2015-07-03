@@ -233,7 +233,7 @@ std::vector<Vector2f> calculate_ellipse_normals(const float radius_x,
         const float inv_modulus = Q_rsqrt(normal_vectors[j][0] * normal_vectors[j][0] +
                                           normal_vectors[j][1] * normal_vectors[j][1]);
         normal_vectors[j] *= inv_modulus;
-        std::cout << normal_vectors[j][0] << ' ' << normal_vectors[j][1] << std::endl;
+        //std::cout << normal_vectors[j][0] << ' ' << normal_vectors[j][1] << std::endl;
         //normal_vectors[j].normalize();
     }
     return normal_vectors;

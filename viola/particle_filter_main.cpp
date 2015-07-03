@@ -291,7 +291,6 @@ int particle_filter()
     for (int z = 0; z < 5000; z++){
         ellipses.get_ellipse(BodyPart::HEAD, z);
     }
-
     while (!mrpt::system::os::kbhit()) {
         // Adquisition
         listener->waitForNewFrame(frames_kinect2);
@@ -318,7 +317,12 @@ int particle_filter()
         cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
 
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
-        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
+        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_display_frame);
+
+        /*
+        cv::Mat gradient_vectors_depth, gradient_magnitude_depth, gradient_magnitude_scaled_depth;
+        std::tie(gradient_vectors_depth, gradient_magnitude_depth, gradient_magnitude_scaled_depth) = sobel_operator(depth_frame);
+        */
 
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
@@ -359,6 +363,7 @@ int particle_filter()
         for (auto &cara : caras){
             circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
         }
+        viola_faces::print_faces(caras, color_display_frame, 1, 1);
 #endif
         if (circles.size() != 0) {
             int circle_max = 0;
@@ -375,7 +380,7 @@ int particle_filter()
 
             cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
 
-            cv::circle(color_display_frame, center, circles[circle_max][2], cv::Scalar(0, 255, 255), -1, 8, 0);
+            //cv::circle(color_display_frame, center, circles[circle_max][2], cv::Scalar(0, 255, 255), -1, 8, 0);
 
             const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x));
             if (center_depth == 0){
@@ -386,7 +391,7 @@ int particle_filter()
         }
 
         class_trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
-        class_trackers.update();
+        class_trackers.update(ellipses);
         class_trackers.show(color_display_frame, depth_frame);
 
         if (class_trackers.states.size()){
@@ -397,14 +402,15 @@ int particle_filter()
             CImage model_histogram_image;
             model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(class_trackers.states[0].color_model, 10)));
             model_histogram_window.showImage(model_histogram_image);
-            int n_pixels;
-            cv::Mat mask = fast_create_ellipse_mask(class_trackers.states[0].region, 1, n_pixels);
-            const cv::Mat mask_weight = create_ellipse_weight_mask(mask);
+
+            /*
+            const cv::Mat mask_weight = ellipses->get_ellipse_mask_weights(class_trackers.states[0].z);
             cv::Mat m;
             mask_weight *= 255;
             mask_weight.convertTo(m, CV_8UC1);
             model_histogram_image.loadFromIplImage(new IplImage(m));
             model_histogram_window.showImage(model_histogram_image);
+            */
         }
 
         //visualization

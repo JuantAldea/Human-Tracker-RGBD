@@ -28,7 +28,7 @@ struct StateEstimation
     cv::Point center;
     cv::Rect region;
     cv::Mat color_model;
-
+    float factor = 1;
     float score_color;
     float score_shape;
     float score_total;

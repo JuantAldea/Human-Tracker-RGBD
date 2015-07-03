@@ -1,14 +1,23 @@
 #pragma once
 #include <cmath>
-#include "model_parameters.h"
-
-/*
 #include <limits>
 
+/*
+#include "model_parameters.h"
 #include "CImageParticleFilter.h"
 #include "geometry_helpers.h"
 #include "color_model.h"
 */
+
+
+template<typename DEPTH_TYPE>
+CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, ImageRegistration *reg, normal_dist *normal_distribution) :
+    ellipses(ellipses),
+    registration_data(reg),
+    depth_normal_distribution(normal_distribution)
+{
+    ;
+}
 
 template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
@@ -33,6 +42,12 @@ template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::set_color_model(const cv::Mat &model)
 {
     color_model = model.clone();
+}
+
+template<typename DEPTH_TYPE>
+const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_color_model() const
+{
+    return color_model;
 }
 
 template<typename DEPTH_TYPE>
@@ -313,14 +328,21 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
 #endif
 */
     //third, weight them
+    printf("VALID PARTICLES: %lu\n", N);
     auto weight_valid_particle = [this, &particles_color_model, &particles_ellipse_fitting] (size_t i){
         const float distance_hist = cv::compareHist(color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+        const float color_score  = (1 - distance_hist);
+        const float fitting_score = particles_ellipse_fitting[i];
+        const float z_score = 1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
+        //printf("%f %f\n", std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001, z_score);
+
         float score = 1;
-        score *= (1 - distance_hist);
-        score *= particles_ellipse_fitting[i];
-        //score *= 1.0f /(0.4 * sqrt(2* M_PI)) * exp(-0.5 * (0 - (particles_valid_roi[i].get().d->z - last_distance)) / (0.4*0.4));
+        score *= color_score;
+        score *= fitting_score;
+        score *= z_score;
+
         particles_valid_roi[i].get().log_w += log(score);
-        particles_valid_roi[i].get().log_w += log(1);
+        //printf("%f %f %f = %f (%f)\n", color_score, fitting_score, z_score, score, particles_valid_roi[i].get().log_w);
     };
 
 #ifdef USE_INTEL_TBB
@@ -365,19 +387,15 @@ void CImageParticleFilter<DEPTH_TYPE>::prediction_and_update_pfStandardProposal(
 }
 
 template<typename DEPTH_TYPE>
-void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const pair<float, float> &x,
+void CImageParticleFilter<DEPTH_TYPE>::init_particles(const size_t M, const pair<float, float> &x,
         const pair<float, float> &y, const pair<float, float> &z, const pair<float, float> &v_x,
-        const pair<float, float> &v_y, const pair<float, float> &v_z, const pair<float, float> &object_axes_length,
-        const ImageRegistration &registration_data, EllipseStash *ellipses)
+        const pair<float, float> &v_y, const pair<float, float> &v_z, const pair<float, float> &object_axes_length)
 {
     clearParticles();
     m_particles.resize(M);
 
-    this->registration_data = registration_data;
-    this->ellipses = ellipses;
-
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
-        it->d = new CImageParticleData();
+        it->d = new ParticleData();
 
         it->d->x = randomGenerator.drawGaussian1D(x.first, x.second);
         it->d->y = randomGenerator.drawGaussian1D(y.first, y.second);
