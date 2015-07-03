@@ -68,6 +68,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
         if (m_particles[i].d->x >= 0 && m_particles[i].d->x < depth_mat.cols && m_particles[i].d->y >= 0 && m_particles[i].d->y < depth_mat.rows){
             m_particles[i].d->z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
         }
+
         const double inv_dt = 1.0 / dt;
         m_particles[i].d->vx = (m_particles[i].d->x - old_x) * inv_dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->vy = (m_particles[i].d->y - old_y) * inv_dt + TRANSITION_MODEL_STD_VXY * randomGenerator.drawGaussian1D_normalized();
@@ -83,6 +84,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
         m_particles[i].d->object_y_length_pixels = 0;
 
         if(m_particles[i].d->z != 0){
+            /*
             Eigen::Vector2i top_corner, bottom_corner;
             std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(m_particles[i].d->x, m_particles[i].d->y), m_particles[i].d->z,
                 Eigen::Vector2f(this->object_x_length * 0.5, this->object_y_length * 0.5),
@@ -92,6 +94,21 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
                 const Eigen::Vector2i pixel_lengths = bottom_corner - top_corner;
                 m_particles[i].d->object_x_length_pixels = pixel_lengths[0];
                 m_particles[i].d->object_y_length_pixels = pixel_lengths[1];
+            }
+            */
+
+            const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, m_particles[i].d->z);
+
+            const cv::Rect particle_roi = cv::Rect(cvRound(m_particles[i].d->x - ellipse_axes.width * 0.5f),
+                                                   cvRound(m_particles[i].d->y - ellipse_axes.height * 0.5f),
+                                                   ellipse_axes.width, ellipse_axes.height);
+
+            //std::cout <<  "ROI " << particle_roi <<std::endl;
+            const bool fits = rect_fits_in_frame(particle_roi, depth_mat);
+
+            if (fits){
+                m_particles[i].d->object_x_length_pixels = ellipse_axes.width;
+                m_particles[i].d->object_y_length_pixels = ellipse_axes.height;
             }
         }
     };
@@ -156,10 +173,15 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     split_particles();
     assert(particles_invalid_roi.size() + particles_valid_roi.size() == m_particles.size());
 
+    if (!particles_valid_roi.size()){
+        throw;
+    }
+
     size_t N = particles_valid_roi.size();
 
     vector<cv::Mat> particles_color_model(N);
     vector<float> particles_ellipse_fitting(N);
+    /*
     vector<cv::Rect> particles_roi(N);
 
     for (size_t i = 0; i < N; i++){
@@ -170,13 +192,22 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
             particle.d->object_x_length_pixels, particle.d->object_y_length_pixels
         );
     }
-
+    */
     auto compute_valid_particle_color_model = [&](size_t i){
-        const cv::Rect &particle_roi = particles_roi[i];
-        const cv::Mat mask = fast_create_ellipse_mask(particle_roi, 1);
+        //const cv::Rect &particle_roi = particles_roi[i];
+        //const cv::Mat mask = fast_create_ellipse_mask(particle_roi, 1, n_pixels);
+
+        const ParticleType &particle = particles_valid_roi[i];
+        const cv::Mat &mask = ellipses->get_ellipse_mask_1D(BodyPart::HEAD, particle.d->z);
+        const cv::Mat &mask_weights = ellipses->get_ellipse_mask_weights(BodyPart::HEAD, particle.d->z);
+        const cv::Rect &particle_roi = cv::Rect(
+            particle.d->x - particle.d->object_x_length_pixels * 0.5,
+            particle.d->y - particle.d->object_y_length_pixels * 0.5,
+            mask.cols, mask.rows);
+        //std::cout  << "ROI2 " << particle_roi << std::endl;
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
-        //particles_color_model[i] = compute_color_model2(particle_roi_img, mask);
-        particles_color_model[i] = compute_color_model(particle_roi_img, mask);
+        particles_color_model[i] = compute_color_model2(particle_roi_img, mask_weights);
+        //particles_color_model[i] = compute_color_model(particle_roi_img, mask);
 #ifdef DEBUG
         if (i == 0){
             particle_image.loadFromIplImage(new IplImage(particle_roi_img));
@@ -240,15 +271,17 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         sum_gradient_fitting += particles_ellipse_fitting[i];
     }
 #endif
-
+//TODO WILL CRASH IF NO PARTICLE IS VALID
 float max_fitting = particles_ellipse_fitting[0];
 float min_fitting = particles_ellipse_fitting[0];
+
 for (size_t i = 0; i < N; i++) {
     min_fitting = std::min(min_fitting, particles_ellipse_fitting[i]);
     max_fitting = std::max(max_fitting, particles_ellipse_fitting[i]);
 }
 
 float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
+
 
 #ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
@@ -281,11 +314,13 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
 */
     //third, weight them
     auto weight_valid_particle = [this, &particles_color_model, &particles_ellipse_fitting] (size_t i){
-        const double distance_hist = cv::compareHist(color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
-        double score = 1;
+        const float distance_hist = cv::compareHist(color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+        float score = 1;
         score *= (1 - distance_hist);
         score *= particles_ellipse_fitting[i];
+        //score *= 1.0f /(0.4 * sqrt(2* M_PI)) * exp(-0.5 * (0 - (particles_valid_roi[i].get().d->z - last_distance)) / (0.4*0.4));
         particles_valid_roi[i].get().log_w += log(score);
+        particles_valid_roi[i].get().log_w += log(1);
     };
 
 #ifdef USE_INTEL_TBB
@@ -304,6 +339,7 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
 
     const size_t N_invalids = particles_invalid_roi.size();
     constexpr double w_invalid = log(std::numeric_limits<double>::min());
+
     for (size_t i = 0; i < N_invalids; i++) {
         particles_invalid_roi[i].get().log_w += w_invalid;
     }
@@ -332,12 +368,13 @@ template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const pair<float, float> &x,
         const pair<float, float> &y, const pair<float, float> &z, const pair<float, float> &v_x,
         const pair<float, float> &v_y, const pair<float, float> &v_z, const pair<float, float> &object_axes_length,
-        const ImageRegistration &registration_data)
+        const ImageRegistration &registration_data, EllipseStash *ellipses)
 {
     clearParticles();
     m_particles.resize(M);
 
     this->registration_data = registration_data;
+    this->ellipses = ellipses;
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         it->d = new CImageParticleData();
@@ -363,7 +400,7 @@ void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const
         it->log_w = 0;
 
         std::tie(this->object_x_length, this->object_y_length) = object_axes_length;
-
+        /*
         Eigen::Vector2i top_corner, bottom_corner;
         std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(it->d->x, it->d->y), it->d->z,
             Eigen::Vector2f(this->object_x_length * 0.5, this->object_y_length * 0.5),
@@ -371,6 +408,11 @@ void CImageParticleFilter<DEPTH_TYPE>::initializeParticles(const size_t M, const
 
         it->d->object_x_length_pixels = cvRound((bottom_corner - top_corner)[0]);
         it->d->object_y_length_pixels = cvRound((bottom_corner - top_corner)[1]);
+        */
+
+        cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, it->d->z);
+        it->d->object_x_length_pixels = ellipse_axes.width;
+        it->d->object_y_length_pixels = ellipse_axes.height;
     }
 }
 
@@ -410,8 +452,12 @@ float CImageParticleFilter<DEPTH_TYPE>::get_mean(float &x, float &y, float &z, f
     }
 #endif
 
-    std::cout << "MEAN WEIGHT " << sumW / m_particles.size() << std::endl;
-    ASSERT_(sumW > 0)
+    //std::cout << "MEAN WEIGHT " << sumW / m_particles.size() << std::endl;
+    //ASSERT_(sumW > 0)
+
+    if (sumW <= 0){
+        throw;
+    }
 
     x = 0;
     y = 0;
@@ -450,7 +496,6 @@ float CImageParticleFilter<DEPTH_TYPE>::get_mean(float &x, float &y, float &z, f
     vz = float(max_it->d->vz);
     */
 
-
-    cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
+    //cout << "PARTICLES USED " << m_particles_filtered.size() << endl;
     return sumW / m_particles.size();
 }

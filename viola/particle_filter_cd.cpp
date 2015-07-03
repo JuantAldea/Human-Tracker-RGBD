@@ -96,7 +96,7 @@ public:
 
 
     void update_color_model(cv::Mat *model, const int roi_width, const int roi_height);
-    
+
     void get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
     void print_particle_state(void) const;
 
@@ -132,7 +132,7 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
     const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
-    
+
     ASSERT_(obs_image);
     ASSERT_(obs_depth);
 
@@ -173,7 +173,7 @@ void CImageParticleFilter::update_particles_with_transition_model(const double d
 void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensoryFrame * const observation)
 {
     const CObservationImagePtr obs_image = observation->getObservationByClass<CObservationImage>(0);
-    
+
     ASSERT_(obs_image);
 
     const cv::Mat image_mat = cv::Mat(obs_image->image.getAs<IplImage>());
@@ -206,7 +206,7 @@ void CImageParticleFilter::weight_particles_with_model(const mrpt::obs::CSensory
     }
 #else
     tbb::concurrent_vector <cv::Mat> particles_color_model(N);
-    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS), 
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
         [this, &frame_hsv, &particles_color_model](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 const cv::Rect particle_roi(m_particles[i].d->x - roi_width * 0.5,
@@ -283,7 +283,7 @@ void CImageParticleFilter::initializeParticles(const size_t M, const pair<float,
 
     const CObservationImagePtr obs_depth = observation->getObservationByClass<CObservationImage>(1);
     ASSERT_(obs_depth);
-    
+
     const cv::Mat depth_mat = cv::Mat(obs_depth->image.getAs<IplImage>());
 
     m_particles.resize(M);
@@ -467,7 +467,7 @@ void TestBayesianTracking()
         SF.insert(obsImage);
         SF.insert(obsImage2);
 
-        
+
         cv::Mat gradient = sobel_operator(color_frame);
 
         double min, max;
@@ -475,7 +475,7 @@ void TestBayesianTracking()
         cv::Mat depth_frame_normalized = (depth_frame * 255)/ max;
         cv::Mat gradient_depth = sobel_operator(depth_frame_normalized);
         cv::Mat gradient_depth_8UC1 = cv::Mat(depth_frame.size(), CV_8UC1);
-        
+
         gradient_depth.convertTo(gradient_depth_8UC1, CV_8UC1);
         CImage model_image;
         model_image.loadFromIplImage(new IplImage(gradient));
@@ -545,11 +545,11 @@ void TestBayesianTracking()
             cv::circle(color_frame, cv::Point(avrg_x, avrg_y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             cv::line(color_frame, cv::Point(avrg_x, avrg_y), cv::Point(avrg_x + avrg_vx, avrg_y + avrg_vy),
                      cv::Scalar(0, 255, 0), 5, 1, 0);
-            
+
             //particles.print_particle_state();
             std::cout << "MEAN " << avrg_x << ' ' << avrg_y << ' ' << avrg_z << ' ' << avrg_vx << ' ' << avrg_vy << ' ' << avrg_vz << std::endl;
         }
-    
+
         CImage frame_particles;
         frame_particles.loadFromIplImage(new IplImage(color_frame));
         image.showImage(frame_particles);

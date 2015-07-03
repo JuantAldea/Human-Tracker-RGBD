@@ -13,7 +13,8 @@ cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
 cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image);
 
-cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &mask, const cv::Mat &weights, const int ndims, const int hist_size[], const float * const ranges[])
+//cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &mask, const cv::Mat &weights, const int ndims, const int hist_size[], const float * const ranges[])
+cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &weights, const int ndims, const int hist_size[], const float * const ranges[])
 {
     int hist_rows = hist_size[0];
     int hist_cols = 1;
@@ -31,7 +32,8 @@ cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &m
     const int img_channels = image.channels();
     for (int i = 0; i < image.rows; i++){
         const uchar *p_row = image.ptr<uchar>(i);
-        const uchar *mask_row = mask.ptr<uchar>(i);
+        //const uchar *mask_row = mask.ptr<uchar>(i);
+        const float *mask_row = weights.ptr<float>(i);
         for (int j = 0; j < image.cols; j++){
             if (mask_row[j]){
                 uint bins[ndims];
@@ -45,19 +47,19 @@ cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &m
                 //const uint bin_s = hsv[1] / bin_width_2;
                 //hist.at<float>(bin_h, bin_s) += 1;
                 //std::cout << i << ' ' << j << ' ' << sqrt(pow(i - image.rows, 2 ) + pow(j - image.cols, 2)) << ' ' << weights.at<float>(i, j) << std::endl;
-                
-                //general case would be 
+
+                //general case would be
                 // array_index = dot( exclusive_prefix_product(dimx, dimy, ..., dimn), (x, y, z) ). e.g: dot((1, dimx, dimx*dimy), (x, y, z))
                 switch (ndims){
                     case 1:
-                        hist_data[bins[0]] += 1;
+                        hist_data[bins[0]] += weights.at<float>(i, j);
                     break;
-                    default: 
-                        hist_data[bins[0]*hist_cols + bins[1]] += 1;
+                    default:
+                        hist_data[bins[0]*hist_cols + bins[1]] += weights.at<float>(i, j);
                         //hist.at<float>(bins[0], bins[1]) += 1;//mask.at<float>(i, j);
                     break;
                 }
-                
+
                 //float *p = hist.ptr<float>(0);
                 /*
                 for (int c = 0; c < ndims - 1; c++){
@@ -73,7 +75,7 @@ cv::Mat calc_hist2D(const cv::Mat &image, const int channels[], const cv::Mat &m
                 //make
                 //p[bins[ndims - 1]] += 1;
                 */
-                
+
 
             }
         }
@@ -119,7 +121,7 @@ cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask)
     return histogram;
 }
 
-cv::Mat compute_color_model2(const cv::Mat &hsv, const cv::Mat &mask)
+cv::Mat compute_color_model2(const cv::Mat &hsv, const cv::Mat &weights)
 {
     // Quantize the hue to 30 levels
     // and the saturation to 32 levels
@@ -138,7 +140,7 @@ cv::Mat compute_color_model2(const cv::Mat &hsv, const cv::Mat &mask)
         const float* ranges[] = {hranges, sranges};
         const int channels[] = {0, 1};
         //cv::calcHist(&hsv, 1, channels, mask, histogram, 2, histSize, ranges, true, false);
-        histogram = calc_hist2D(hsv, channels, mask, cv::Mat(), 2, histSize, ranges);
+        histogram = calc_hist2D(hsv, channels, weights, 2, histSize, ranges);
     }
 
     cv::Mat histogram_v;
@@ -148,7 +150,7 @@ cv::Mat compute_color_model2(const cv::Mat &hsv, const cv::Mat &mask)
         const float range[] = {0, 256} ;
         const float *ranges[] = {range};
         //cv::calcHist(&hsv, 1, channels, mask, histogram_v, 1, histSize, &histRange, true, false);
-        histogram_v = calc_hist2D(hsv, channels, mask, cv::Mat(), 1, histSize, ranges);
+        histogram_v = calc_hist2D(hsv, channels, weights, 1, histSize, ranges);
     }
 
     histogram_v = histogram_v.t();
@@ -182,7 +184,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 
     cv::Mat orig = image.clone();
     //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
-    cv::medianBlur(orig, orig, 7);
+    //cv::medianBlur(orig, orig, 7);
     cv::Mat image_gray;
     if (image.channels() > 1){
         cvtColor(orig, image_gray, CV_RGB2GRAY);
@@ -194,25 +196,23 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     cv::Mat squared_grad_x, squared_grad_y;
     cv::Mat gradient_modulus;
     cv::Mat image_gray_float;
-    
+
     //cv::Mat image_gray2;
     //bilateralFilter (image_gray, image_gray2, 15, 80, 80);
     //image_gray = image_gray2;
-    
+
     image_gray.convertTo(image_gray_float, CV_32F);
     cv::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
     cv::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
-    
     //cv::medianBlur ( grad_x, grad_x, 5 );
     //cv::medianBlur ( grad_y, grad_y, 5 );
-
-
 
     cv::Mat grad_x_float, grad_y_float;
     grad_x.convertTo(grad_x_float, CV_32F);
     grad_y.convertTo(grad_y_float, CV_32F);
     cv::pow(grad_x_float, 2.f, squared_grad_x);
     cv::pow(grad_y_float, 2.f, squared_grad_y);
+    //return std::make_tuple(cv::Mat(), cv::Mat(), cv::Mat());
     cv::sqrt(squared_grad_x + squared_grad_y, gradient_modulus);
     cv::Mat gradient_modulus_copy = gradient_modulus.clone();
     cv::threshold(gradient_modulus_copy, gradient_modulus, 1000, 0, cv::THRESH_TOZERO);

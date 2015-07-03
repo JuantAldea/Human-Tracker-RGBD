@@ -105,3 +105,37 @@ enum class GlobalColorNames  {
     LIGHT_GRAY_2,
 };
 */
+
+inline bool rect_fits_in_rect(const cv::Rect &smaller, const cv::Rect &bigger)
+{
+
+    if (smaller.x < 0 || smaller.y < 0){
+        return false;
+    }
+
+    if (smaller.width <= 0 || smaller.height <= 0){
+        return false;
+    }
+
+    if (smaller.x + smaller.width >= bigger.x + bigger.width || smaller.y + smaller.height >= bigger.y + bigger.height){
+        return false;
+    }
+
+
+    if (smaller.width <= 0 || smaller.height <= 0){
+        return false;
+    }
+
+    return true;
+
+    const cv::Rect region_intersection = bigger & smaller;
+    //const cv::Rect region_intersection2 = smaller & bigger;
+
+    return smaller.area() == region_intersection.area();
+}
+
+inline bool rect_fits_in_frame(const cv::Rect &r, const cv::Mat &f)
+{
+    const cv::Rect frame_region = cv::Rect(0, 0, f.cols, f.rows);
+    return rect_fits_in_rect(r, frame_region);
+}

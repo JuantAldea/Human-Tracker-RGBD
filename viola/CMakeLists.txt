@@ -10,9 +10,10 @@ SET(CMAKE_CXX_STANDARD 11)
 
 #SET(CMAKE_CXX_FLAGS_DEBUG "${viola_SOURCE_DIR} -ggdb3 -O0 -pg -std=c++11 -fbuiltin -fno-inline")
 #SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} --fast-math -O3 -flto")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=c++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=c++11 -pg -fbuiltin")
-SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=c++11 -pg -fbuiltin")
+
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=c++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
+#SET(CMAKE_EXE_LINKER_FLAGS "-pg")
 
 FIND_PACKAGE(PkgConfig QUIET)
 
@@ -56,6 +57,18 @@ LINK_DIRECTORIES(${viola_SOURCE_DIR})
 ADD_LIBRARY(ImageParticleFilter STATIC CImageParticleFilter.h)
 SET_TARGET_PROPERTIES(ImageParticleFilter PROPERTIES LINKER_LANGUAGE CXX)
 
+ADD_LIBRARY(EllipseStash STATIC EllipseStash.h)
+SET_TARGET_PROPERTIES(EllipseStash PROPERTIES LINKER_LANGUAGE CXX)
+
+ADD_LIBRARY(Tracker STATIC Tracker.h)
+SET_TARGET_PROPERTIES(Tracker PROPERTIES LINKER_LANGUAGE CXX)
+
+ADD_LIBRARY(MultiTracker STATIC MultiTracker.h)
+SET_TARGET_PROPERTIES(MultiTracker PROPERTIES LINKER_LANGUAGE CXX)
+
+ADD_LIBRARY(StateEstimation STATIC StateEstimation.h)
+SET_TARGET_PROPERTIES(StateEstimation PROPERTIES LINKER_LANGUAGE CXX)
+
 ADD_LIBRARY(EllipseFunctions STATIC ellipse_functions.h)
 SET_TARGET_PROPERTIES(EllipseFunctions PROPERTIES LINKER_LANGUAGE CXX)
 
@@ -68,11 +81,10 @@ SET_TARGET_PROPERTIES(GeometryHelpers PROPERTIES LINKER_LANGUAGE CXX)
 ADD_LIBRARY(MiscHelpers STATIC misc_helpers.h)
 SET_TARGET_PROPERTIES(MiscHelpers PROPERTIES LINKER_LANGUAGE CXX)
 
-#ADD_LIBRARY(ImageParticleFilter SHARED CImageParticleFilter.cpp)
+ADD_LIBRARY(FacesDetection STATIC faces_detection.cpp)
+ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
 
-ADD_LIBRARY(FacesDetection SHARED faces_detection.cpp)
 #ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
-ADD_LIBRARY(ImageRegistration SHARED ImageRegistration.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 
@@ -123,6 +135,10 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     ColorModel
     GeometryHelpers
     MiscHelpers
+    Tracker
+    MultiTracker
+    StateEstimation
+    EllipseStash
 )
 
 #[[

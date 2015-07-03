@@ -22,6 +22,7 @@ IGNORE_WARNINGS_POP
 #include "color_model.h"
 #include "ellipse_functions.h"
 #include "ImageRegistration.h"
+#include "EllipseStash.h"
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -77,7 +78,8 @@ public:
                              const pair<float, float> &v_y,
                              const pair<float, float> &v_z,
                              const pair<float, float> &object_semiaxes_lengths,
-                             const ImageRegistration &registration_data);
+                             const ImageRegistration &registration_data,
+                             EllipseStash *ellipses);
 
 
     void set_color_model(const cv::Mat &model);
@@ -85,6 +87,7 @@ public:
     float get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
     void print_particle_state(void) const;
 
+    float last_distance;
     int64_t last_time;
     cv::Mat color_model;
     const vector<Eigen::Vector2f> *shape_model;
@@ -99,9 +102,13 @@ private:
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;
 
     ImageRegistration registration_data;
+    EllipseStash *ellipses;
     float object_x_length;
     float object_y_length;
 };
 
+
+//templated methods should have its definition in the same compilation unit
+//of its declaration... hence this dirty trick.
 
 #include "CImageParticleFilter.cpp"

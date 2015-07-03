@@ -150,14 +150,21 @@ std::string serial = "013572345247";
 int main(int argc, char *argv[])
 {
     (void)(argc);
+    (void)(argv);
+
     char *calib_dir = getenv("HOME");
     std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
     ImageRegistration reg;
     reg.init(calib_path, serial);
-    //const float cx = reg.cameraMatrixColor.at<double>(0, 2);
-    //const float cy = reg.cameraMatrixColor.at<double>(1, 2);
-    const float cx = 1920 * 0.5;
-    const float cy = 1080 * 0.5;
+
+    float cx = reg.cameraMatrixColor.at<double>(0, 2);
+    float cy = reg.cameraMatrixColor.at<double>(1, 2);
+
+    //const float cx = 1000 * 0.5;
+    //const float cy = 500 * 0.5;
+
+    //std::cout << cx << ' ' << cy << ' ' << cxr << ' ' << cyr << std::endl;
+    //exit(-1);
     const float X_SEMI_AXIS_METTERS = atof(argv[1]) * 0.5;
     const float Y_SEMI_AXIS_METTERS = atof(argv[2]) * 0.5;
 
@@ -168,21 +175,51 @@ int main(int argc, char *argv[])
     sprintf(filename, "ellipses_%fx%f.bin", atof(argv[1]), atof(argv[2]));
     char size[20];
 
-    for (int depth = 500; depth < 5000; depth++){
-        Eigen::Vector2i top_corner, bottom_corner;
-        std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cx, cy), depth,
-            Eigen::Vector2f(X_SEMI_AXIS_METTERS, Y_SEMI_AXIS_METTERS),
-            reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-        const Eigen::Vector2i model_length = bottom_corner - top_corner;
+    for (int cxx = 0; cxx < 1920; cxx+=1)
+        for (int cyx = 0; cyx < 1080; cyx+=1)
 
-        sprintf(size, "%d_%d", model_length[0], model_length[1]);
+    for (int depth = 500; depth < 5000; depth+=1){
+        Eigen::Vector2i model_length1;
+        Eigen::Vector2i model_length2;
+
+        {
+            Eigen::Vector2i top_corner, bottom_corner;
+            std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cx, cy), depth,
+                Eigen::Vector2f(X_SEMI_AXIS_METTERS, Y_SEMI_AXIS_METTERS),
+                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+            model_length1 = bottom_corner - top_corner;
+
+            //sprintf(size, "%d %d %d %d", cxx, cyx, model_length1[0], model_length1[1]);
+            //std::cout << depth  << " " <<  size << std::endl;
+        }
+
+        {
+            Eigen::Vector2i top_corner, bottom_corner;
+            std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cxx, cyx), depth,
+                Eigen::Vector2f(X_SEMI_AXIS_METTERS, Y_SEMI_AXIS_METTERS),
+                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+            model_length2 = bottom_corner - top_corner;
+
+            //sprintf(size, "%d %d %d %d", cxx, cyx, model_length2[0], model_length2[1]);
+            //std::cout << depth  << " " <<  size << std::endl;
+        }
+
+        if (model_length1[0] && model_length1[1] && model_length2[0] && model_length2[1]){
+            if ((model_length1[0] - model_length2[0]) || model_length1[1] - model_length2[1]){
+                std::cout <<"DIFF " << model_length1[0] - model_length2[0] << std::endl;
+                std::cout <<"DIFF " << model_length1[1] - model_length2[1] << std::endl;
+            }
+        }
+        /*
         std::list<int> depths;
         Eigen::Vector2i lengths;
         std::tie(depths, lengths) = ellipses[std::string(size)];
         depths.push_back(depth);
         ellipses[std::string(size)] = std::make_tuple(depths, model_length);
-        mask[std::string(size)] = std::make_tuple(depths, fast_create_ellipse_mask(cv::Rect(0, 0, model_length[0], model_length[1]), 3));
+        int n_pixels;
+        mask[std::string(size)] = std::make_tuple(depths, fast_create_ellipse_mask(cv::Rect(0, 0, model_length[0], model_length[1]), 3, n_pixels));
         //std::cout << depth << ' ' << model_length[0] << ' ' << model_length[1] << std::endl;
+        */
     }
 
     std::list<Eigen::Vector2i> e;
@@ -239,11 +276,12 @@ int main(int argc, char *argv[])
         std::cout << it->first << "=>" << (it->second)[0] << ' ' <<  (it->second)[1] << std::endl;
 #endif
     }
-
+/*
     {
         std::ofstream ofs(filename);
         oarchive ar(ofs);
         ar & d_e;
+        //ar & d_m;
         ofs.close();
     }
 
@@ -251,6 +289,7 @@ int main(int argc, char *argv[])
         std::ifstream ifs(filename);
         iarchive ar(ifs);
         ar & d_e_2;
+        //ar & d_m_2;
         ifs.close();
     }
 
@@ -260,7 +299,7 @@ int main(int argc, char *argv[])
 #else
         if ((d_e_2[it->first]) != (it->second)) {
 #endif
-            std::cout << " ERROR " << std::endl;
+            std::cout << " ERROR E1" << std::endl;
             exit(-1);
         }
     }
@@ -271,25 +310,34 @@ int main(int argc, char *argv[])
 #else
         if ((d_e[it->first]) != (it->second)) {
 #endif
-            std::cout << " ERROR " << std::endl;
+            std::cout << " ERROR E2" << std::endl;
             exit(-1);
         }
     }
-    std::cout << "OK" << std::endl;
-
-
-    /*
-    std::cout << "TOTAL " << ellipses.size() << std::endl;
-    for (typename decltype(ellipses)::iterator it=ellipses.begin(); it!=ellipses.end(); ++it){
-        Eigen::Vector2i model_length;
-        std::list<int> depths;
-        std::tie(depths, model_length) = it->second;
-        for (typename decltype(depths)::iterator it=depths.begin(); it!=depths.end(); ++it) {
-            std::cout << *it << ", ";
+/*
+    for (typename decltype(d_m)::iterator it=d_m.begin(); it!=d_m.end(); ++it){
+#ifdef POINTER
+        if (*(d_m_2[it->first]) != *(it->second)) {
+#else
+        if ((d_m_2[it->first]) != (it->second)) {
+#endif
+            std::cout << " ERROR M1" << std::endl;
+            exit(-1);
         }
-        std::cout << "=> " << model_length[0] << ' ' << model_length[1] << std::endl;
     }
-    */
+
+    for (typename decltype(d_m_2)::iterator it=d_m_2.begin(); it!=d_m_2.end(); ++it){
+#ifdef POINTER
+        if (*(d_e[it->first]) != *(it->second)) {
+#else
+        if ((d_e[it->first]) != (it->second)) {
+#endif
+            std::cout << " ERROR M2" << std::endl;
+            exit(-1);
+        }
+    }
+*/
+    std::cout << "OK" << std::endl;
 }
 
 
