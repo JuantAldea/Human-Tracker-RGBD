@@ -29,6 +29,7 @@ namespace boost
 {
 namespace serialization
 {
+
 template <class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
 void save(Archive & ar, const
           Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & m,
@@ -39,6 +40,7 @@ void save(Archive & ar, const
     ar & cols;
     ar & boost::serialization::make_array(m.data(), rows * cols);
 }
+
 template <class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
 void load(Archive & ar, Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & m,
           const unsigned int __attribute__((unused)) version)
@@ -127,6 +129,7 @@ namespace boost
 {
 namespace serialization
 {
+
 /** Serialization support for cv::KeyPoint */
 template<class Archive>
 void save(Archive &ar, const cv::KeyPoint &p,
@@ -154,6 +157,7 @@ void load(Archive &ar, cv::KeyPoint &p, const unsigned int __attribute__((unused
     ar & p.class_id;
 }
 }
+
 }
 
 BOOST_SERIALIZATION_SPLIT_FREE(cv::Mat)
@@ -195,6 +199,7 @@ void load(Archive &ar, cv::Mat &m, const unsigned int __attribute__((unused)) ve
     size_t data_size = m.cols * m.rows * elem_size;
     ar & boost::serialization::make_array(m.ptr(), data_size);
 }
+
 }
 }
 
@@ -472,5 +477,4 @@ int main(int argc, char *argv[])
 
     //cv::waitKey(0);
 }
-
 
