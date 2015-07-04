@@ -2,9 +2,9 @@
 
 #include "StateEstimation.h"
 #include "EllipseStash.h"
-
+CDisplayWindow image2("image2");
 template<typename DEPTH_TYPE>
-bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame,
+bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
                    const vector<Eigen::Vector2f> &shape_model, CImageParticleFilter<DEPTH_TYPE> &particles,
                    StateEstimation &state, EllipseStash &ellipses)
 {
@@ -27,11 +27,36 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
 
     //const cv::Mat mask = fast_create_ellipse_mask(state.region, 1, n_pixels);
     const cv::Mat hsv_roi = hsv_frame(state.region);
+    const cv::Mat depth_roi = depth_frame(state.region);
+    cv::Mat depth_roi_masked;
+    depth_roi.copyTo(depth_roi_masked, mask);
+
+    float non_zero = cv::countNonZero(depth_roi_masked);
+    cv::Scalar sum = cv::sum(depth_roi_masked);
+    state.average_z = sum[0] / non_zero;
+    /*
+    {
+        //TODO WTF?
+        //double minVal, maxVal;
+        //cv::minMaxLoc(depth_roi_masked, &minVal, &maxVal);
+        //cv::Mat image_depth;
+        //depth_roi_masked.convertTo(image_depth, CV_8U, 255.0/(maxVal - minVal), -minVal * 255.0/(maxVal - minVal));
+        const int n_pixels = ellipses.get_ellipse_pixels(BodyPart::HEAD, center_depth);
+        const int n_pixels2 = cv::countNonZero(mask);
+        std::cout <<"Z " << state.average_z << " " << center_depth << " " << non_zero << ' ' << n_pixels<< ' ' << n_pixels2 << ' ' << n_pixels2 - n_pixels<<std::endl;
+        std::cout << state.region << std::endl;
+        CImage model_frame_image;
+        model_frame_image.loadFromIplImage(new IplImage(image_depth));
+        image2.showImage(model_frame_image);
+    }
+    */
+
     //state.color_model = compute_color_model(hsv_roi, mask);
     state.color_model = compute_color_model2(hsv_roi, mask_weights);
 
     particles.set_color_model(state.color_model);
     particles.set_shape_model(shape_model);
+    //particles.last_distance = state.average_z;
     particles.last_distance = state.z;
 
     particles.init_particles(NUM_PARTICLES,
@@ -73,22 +98,21 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
 
 
 template <typename DEPTH_TYPE>
-void do_tracking(StateEstimation &state, CParticleFilter &PF,
-                 CImageParticleFilter<DEPTH_TYPE> &particles,
-                 const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats,
-                 float &mean_weight)
+void do_tracking(CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particles,
+                 const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats)
 {
     PF.executeOn(particles, NULL, &observation, &stats);
-    mean_weight = particles.get_mean(state.x, state.y, state.z, state.v_x, state.v_y, state.v_z);
     //cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
     //cout << "Particle filter ESS: " << particles.ESS() << endl;
 }
 
 template <typename DEPTH_TYPE>
-void build_visual_model(const StateEstimation &old_state, StateEstimation &new_state,
+void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
+                        const StateEstimation &old_state, StateEstimation &new_state,
                         const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
                         EllipseStash &ellipses)
 {
+    particles.get_mean(new_state.x, new_state.y, new_state.z, new_state.v_x, new_state.v_y, new_state.v_z);
     Eigen::Vector2i top_corner, bottom_corner;
     const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(new_state.y),
                                          cvRound(new_state.x));

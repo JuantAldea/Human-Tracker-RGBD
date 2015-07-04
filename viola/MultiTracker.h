@@ -24,7 +24,7 @@ struct MultiTracker {
     };
 
     void insert_tracker(const cv::Point &center, const float center_depth,
-                        const cv::Mat &hsv_frame, EllipseStash &ellipses)
+                        const cv::Mat &hsv_frame, const cv::Mat &depth_frame, EllipseStash &ellipses)
     {
         auto already_tracked = [&](const float distance) {
             if (states.empty()) {
@@ -67,7 +67,7 @@ struct MultiTracker {
         trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, &reg, &depth_distribution));
         states.push_back(StateEstimation());
         new_states.push_back(StateEstimation());
-        init_tracking<DEPTH_TYPE>(center, center_depth, hsv_frame, ellipse_normals,
+        init_tracking<DEPTH_TYPE>(center, center_depth, hsv_frame, depth_frame, ellipse_normals,
                                   trackers.back(), states.back(), ellipses);
     };
 
@@ -82,9 +82,8 @@ struct MultiTracker {
             StateEstimation &estimated_new_state = new_states[i];
             const StateEstimation &estimated_state = states[i];
             static CParticleFilter::TParticleFilterStats stats;
-            float mean_weight;
-            do_tracking(estimated_new_state, PF, particles, observation, stats, mean_weight);
-            build_visual_model<DEPTH_TYPE>(estimated_state, estimated_new_state, hsv_frame,
+            do_tracking(PF, particles, observation, stats);
+            build_state_model<DEPTH_TYPE>(particles, estimated_state, estimated_new_state, hsv_frame,
                                            depth_frame, ellipses);
             score_visual_model(estimated_new_state, particles, gradient_vectors, ellipse_normals);
             particles.last_time = cv::getTickCount();
@@ -108,6 +107,7 @@ struct MultiTracker {
                 estimated_state.color_model = blended_color_model;
                 particles.set_color_model(estimated_state.color_model);
                 //blended_color_model = estimated_new_state.color_model;
+                //particles.last_distance = estimated_state.average_z;
                 particles.last_distance = estimated_state.z;
             }
 
@@ -216,6 +216,8 @@ struct MultiTracker {
 
             for (size_t j = 0; j < N_PARTICLES; j++) {
                 int radius = cvRound(1 + 1.0f/20 * max_w/exp(particles.m_particles[j].log_w) );
+                radius = std::min(radius, 255);
+                radius = std::max(radius, 1);
                 cv::circle(color_display_frame,
                            cv::Point(particles.m_particles[j].d->x, particles.m_particles[j].d->y), radius,
                            GlobalColorPalette[i], 1, 1, 0);

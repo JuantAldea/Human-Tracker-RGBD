@@ -286,16 +286,20 @@ int particle_filter()
     PF.m_options = PF_options;
 
     MultiTracker<DEPTH_TYPE> class_trackers(reg);
-    EllipseStash ellipses(reg);
 
+    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.400000x0.600000.bin"});
+    //EllipseStash ellipses(reg);
+    /*
     for (int z = 0; z < 5000; z++){
         ellipses.get_ellipse(BodyPart::HEAD, z);
     }
+    */
     /*
     for (int z = 0; z < 5000; z++){
         ellipses.get_ellipse(BodyPart::TORSO, z);
     }
     */
+
 
     while (!mrpt::system::os::kbhit()) {
         // Adquisition
@@ -393,7 +397,7 @@ int particle_filter()
                 continue;
             }
 
-            class_trackers.insert_tracker(center, center_depth, hsv_frame, ellipses);
+            class_trackers.insert_tracker(center, center_depth, hsv_frame, depth_frame, ellipses);
         }
 
         class_trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);

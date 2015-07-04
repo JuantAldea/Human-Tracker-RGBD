@@ -23,6 +23,8 @@ struct StateEstimation
     float v_y;
     float v_z;
 
+    float average_z;
+
     int radius_x;
     int radius_y;
     cv::Point center;
@@ -34,7 +36,7 @@ struct StateEstimation
     float score_total;
 
     StateEstimation():
-        x(-1), y(-1), z(-1), v_x(-1), v_y(-1), v_z(-1), radius_x(-1), radius_y(-1), center(), region(), color_model(), score_color(-1), score_shape(-1), score_total(-1)
+        x(-1), y(-1), z(-1), v_x(-1), v_y(-1), v_z(-1), average_z(-1), radius_x(-1), radius_y(-1), center(), region(), color_model(), score_color(-1), score_shape(-1), score_total(-1)
     {
         ;
     };

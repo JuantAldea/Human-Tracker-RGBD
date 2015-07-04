@@ -1,270 +1,19 @@
-#include <string>
-#include <map>
-#include <fstream>
-#include <tuple>
-
 #include "ellipse_functions.h"
 #include "ImageRegistration.h"
 #include "geometry_helpers.h"
 
+#include "BoostSerializers.h"
 
-//#include <mrpt/otherlibs/do_opencv_includes.h>
+#include <string>
+#include <map>
+#include <fstream>
+#include <tuple>
 #include <opencv2/opencv.hpp>
 /*
 #include <Eigen/Sparse>
 #include <Eigen/Core>
 */
-
-#ifndef EIGEN_BOOST_SERIALIZATION
-#define EIGEN_BOOST_SERIALIZATION
-
-#include <boost/archive/binary_oarchive.hpp>
-#include <boost/archive/binary_iarchive.hpp>
-#include <boost/serialization/split_free.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/list.hpp>
-#include <boost/serialization/map.hpp>
-
-namespace boost
-{
-namespace serialization
-{
-
-template <class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
-void save(Archive & ar, const
-          Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & m,
-          const unsigned int __attribute__((unused)) version)
-{
-    int rows = m.rows(), cols = m.cols();
-    ar & rows;
-    ar & cols;
-    ar & boost::serialization::make_array(m.data(), rows * cols);
-}
-
-template <class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
-void load(Archive & ar, Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & m,
-          const unsigned int __attribute__((unused)) version)
-{
-    int rows, cols;
-    ar & rows;
-    ar & cols;
-    m.resize(rows, cols);
-    ar & boost::serialization::make_array(m.data(), rows * cols);
-}
-
-template <class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
-void serialize(Archive & ar, Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols>
-               & m, const unsigned int __attribute__((unused)) version)
-{
-    split_free(ar, m, version);
-}
-
-/*
-template <class Archive, typename _Scalar>
-    void save(Archive & ar, const Eigen::Triplet<_Scalar> & m, const unsigned int version) {
-        ar & m.row();
-        ar & m.col();
-        ar & m.value();
-    }
-template <class Archive, typename _Scalar>
-    void load(Archive & ar, Eigen::Triplet<_Scalar> & m, const unsigned int version) {
-        int row,col;
-        _Scalar value;
-        ar & row;
-        ar & col;
-        ar & value;
-        m = Eigen::Triplet<_Scalar>(row,col,value);
-    }
-
-template <class Archive, typename _Scalar>
-    void serialize(Archive & ar, Eigen::Triplet<_Scalar> & m, const unsigned int version) {
-        split_free(ar,m,version);
-    }
-
-template <class Archive, typename _Scalar, int _Options,typename _Index>
-    void save(Archive & ar, const Eigen::SparseMatrix<_Scalar,_Options,_Index> & m, const unsigned int version) {
-        int innerSize=m.innerSize();
-        int outerSize=m.outerSize();
-        typedef typename Eigen::Triplet<_Scalar> Triplet;
-        std::vector<Triplet> triplets;
-        for(int i=0; i < outerSize; ++i) {
-            for(typename Eigen::SparseMatrix<_Scalar,_Options,_Index>::InnerIterator it(m,i); it; ++it) {
-            triplets.push_back(Triplet(it.row(), it.col(), it.value()));
-            }
-        }
-        ar & innerSize;
-        ar & outerSize;
-        ar & triplets;
-    }
-template <class Archive, typename _Scalar, int _Options, typename _Index>
-    void load(Archive & ar, Eigen::SparseMatrix<_Scalar,_Options,_Index>  & m, const unsigned int version) {
-        int innerSize;
-        int outerSize;
-        ar & innerSize;
-        ar & outerSize;
-        int rows = m.IsRowMajor?outerSize:innerSize;
-        int cols = m.IsRowMajor?innerSize:outerSize;
-        m.resize(rows,cols);
-        typedef typename Eigen::Triplet<_Scalar> Triplet;
-        std::vector<Triplet> triplets;
-        ar & triplets;
-        m.setFromTriplets(triplets.begin(), triplets.end());
-
-    }
-template <class Archive, typename _Scalar, int _Options, typename _Index>
-    void serialize(Archive & ar, Eigen::SparseMatrix<_Scalar,_Options,_Index> & m, const unsigned int version) {
-        split_free(ar,m,version);
-    }
-*/
-
-}
-}
-
-
-#include <boost/serialization/split_free.hpp>
-#include <boost/serialization/vector.hpp>
-
-BOOST_SERIALIZATION_SPLIT_FREE(cv::KeyPoint)
-namespace boost
-{
-namespace serialization
-{
-
-/** Serialization support for cv::KeyPoint */
-template<class Archive>
-void save(Archive &ar, const cv::KeyPoint &p,
-          const unsigned int __attribute__((unused)) version)
-{
-    ar & p.pt.x;
-    ar & p.pt.y;
-    ar & p.size;
-    ar & p.angle;
-    ar & p.response;
-    ar & p.octave;
-    ar & p.class_id;
-}
-
-/** Serialization support for cv::KeyPoint */
-template<class Archive>
-void load(Archive &ar, cv::KeyPoint &p, const unsigned int __attribute__((unused)) version)
-{
-    ar & p.pt.x;
-    ar & p.pt.y;
-    ar & p.size;
-    ar & p.angle;
-    ar & p.response;
-    ar & p.octave;
-    ar & p.class_id;
-}
-}
-
-}
-
-BOOST_SERIALIZATION_SPLIT_FREE(cv::Mat)
-namespace boost
-{
-namespace serialization
-{
-
-/** Serialization support for cv::Mat */
-template<class Archive>
-void save(Archive &ar, const cv::Mat &m, const unsigned int __attribute__((unused)) version)
-{
-    size_t elem_size = m.elemSize();
-    size_t elem_type = m.type();
-
-    ar & m.cols;
-    ar & m.rows;
-    ar & elem_size;
-    ar & elem_type;
-
-    const size_t data_size = m.cols * m.rows * elem_size;
-    ar & boost::serialization::make_array(m.ptr(), data_size);
-}
-
-/** Serialization support for cv::Mat */
-template<class Archive>
-void load(Archive &ar, cv::Mat &m, const unsigned int __attribute__((unused)) version)
-{
-    int    cols, rows;
-    size_t elem_size, elem_type;
-
-    ar & cols;
-    ar & rows;
-    ar & elem_size;
-    ar & elem_type;
-
-    m.create(rows, cols, elem_type);
-
-    size_t data_size = m.cols * m.rows * elem_size;
-    ar & boost::serialization::make_array(m.ptr(), data_size);
-}
-
-}
-}
-
-/*
-Copyright 2011 Christopher Allen Ogden. All rights reserved.
-Redistribution and use in source and binary forms, with or without modification, are
-permitted provided that the following conditions are met:
-   1. Redistributions of source code must retain the above copyright notice, this list of
-      conditions and the following disclaimer.
-   2. Redistributions in binary form must reproduce the above copyright notice, this list
-      of conditions and the following disclaimer in the documentation and/or other materials
-      provided with the distribution.
-THIS SOFTWARE IS PROVIDED BY CHRISTOPHER ALLEN OGDEN ``AS IS'' AND ANY EXPRESS OR IMPLIED
-WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
-FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL CHRISTOPHER ALLEN OGDEN OR
-CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-The views and conclusions contained in the software and documentation are those of the
-authors and should not be interpreted as representing official policies, either expressed
-or implied, of Christopher Allen Ogden.
-*/
-
-namespace boost
-{
-namespace serialization
-{
-
-template<uint N>
-struct Serialize {
-    template<class Archive, typename... Args>
-    static void serialize(Archive & ar, std::tuple<Args...> &t, const unsigned int version)
-    {
-        ar & std::get < N - 1 > (t);
-        Serialize < N - 1 >::serialize(ar, t, version);
-    }
-};
-
-template<>
-struct Serialize<0> {
-    template<class Archive, typename... Args>
-    static void serialize(Archive  __attribute__((unused)) &ar,
-                          std::tuple<Args...>  __attribute__((unused)) &t,
-                          const unsigned int __attribute__((unused)) version)
-    {
-        ;
-    }
-};
-
-template<class Archive, typename... Args>
-void serialize(Archive &ar, std::tuple<Args...> &t, const unsigned int version)
-{
-    Serialize<sizeof...(Args)>::serialize(ar, t, version);
-}
-
-}
-}
-
-
-#endif
-
-
+//#include <mrpt/otherlibs/do_opencv_includes.h>
 
 
 using oarchive = boost::archive::binary_oarchive;
@@ -272,8 +21,9 @@ using iarchive = boost::archive::binary_iarchive;
 
 std::string serial = "013572345247";
 
-using MaskData = std::tuple<cv::Mat, cv::Mat, cv::Mat, int>;
 
+using EllipseData = std::tuple<cv::Mat, cv::Mat, cv::Mat, int>;
+using EllipseDepthMap = std::map<int, EllipseData>;
 int main(int argc, char *argv[])
 {
     (void)(argc);
@@ -296,7 +46,7 @@ int main(int argc, char *argv[])
     const float Y_SEMI_AXIS_METTERS = atof(argv[2]) * 0.5;
 
     std::map<std::string, std::tuple<std::list<int>, Eigen::Vector2i>> ellipses;
-    std::map<std::string, std::tuple<std::list<int>, MaskData>> mask;
+    std::map<std::string, std::tuple<std::list<int>, EllipseData>> mask;
     std::cout << "#SIZE: " << X_SEMI_AXIS_METTERS << ' ' << Y_SEMI_AXIS_METTERS << std::endl;
     char filename[20];
     sprintf(filename, "ellipses_%fx%f.bin", atof(argv[1]), atof(argv[2]));
@@ -304,6 +54,8 @@ int main(int argc, char *argv[])
 
     //for (int cxx = 0; cxx < 1920; cxx+=1)
     //    for (int cyx = 0; cyx < 1080; cyx+=1)
+    std::map<int, std::string> depth_size;
+    std::map<std::string, EllipseData> string_ellipse;
 
     for (int depth = 0; depth < 5000; depth += 1) {
         Eigen::Vector2i model_length;
@@ -315,7 +67,7 @@ int main(int argc, char *argv[])
                                                   reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
             model_length = bottom_corner - top_corner;
 
-            //sprintf(size, "%d %d %d %d", cxx, cyx, model_length[0], model_length[1]);
+            sprintf(size, "%d %d", model_length[0], model_length[1]);
             //std::cout << depth  << " " <<  size << std::endl;
         }
 
@@ -340,48 +92,58 @@ int main(int argc, char *argv[])
         }
         */
 
+        int n_pixels;
+
+
+
         std::list<int> depths;
         Eigen::Vector2i lengths;
         std::tie(depths, lengths) = ellipses[std::string(size)];
         depths.push_back(depth);
+
         ellipses[std::string(size)] = std::make_tuple(depths, model_length);
+        cv::Mat e3d = fast_create_ellipse_mask(cv::Rect(0, 0, model_length[0], model_length[1]), 3, n_pixels);
+        cv::Mat e1d = cv::Mat(e3d.rows, e3d.cols, CV_8UC1);
+        int from_to[] = {0,0};
+        cv::mixChannels(&e3d, 1, &e1d, 1, from_to, 1);
+        cv::Mat ew1d = create_ellipse_weight_mask(e1d);
 
-        int n_pixels;
-        cv::Mat e1d = fast_create_ellipse_mask(cv::Rect(0, 0, model_length[0], model_length[1]), 1,
-                                               n_pixels);
-
-        cv::Mat e3d = fast_create_ellipse_mask(cv::Rect(0, 0, model_length[0], model_length[1]), 3,
-                                               n_pixels);
-
-        cv::Mat ew = create_ellipse_weight_mask(e1d);
         //e1d *= 255;
-        mask[std::string(size)] = std::make_tuple(depths, std::make_tuple(e1d, e3d, ew, n_pixels));
+        mask[std::string(size)] = std::make_tuple(depths, std::make_tuple(e1d, e3d, ew1d, n_pixels));
         //std::cout << depth << ' ' << model_length[0] << ' ' << model_length[1] << std::endl;
+
+        depth_size[depth] = std::string(size);
+        string_ellipse[std::string(size)] = std::make_tuple(e1d, e3d, ew1d, n_pixels);
+    }
+
+    std::map<int, EllipseData*> depth_data;
+    for (int depth = 0; depth < 5000; depth++){
+        depth_data[depth] = &string_ellipse[depth_size[depth]];
     }
 
     std::list<Eigen::Vector2i> e;
-    std::list<std::tuple<cv::Mat, cv::Mat, cv::Mat, int>> mats;
-
-
+    std::list<EllipseData> mats;
 
     std::map<int, Eigen::Vector2i> d_e;
     std::map<int, Eigen::Vector2i> d_e_2;
-    std::map<int, MaskData> d_m_2;
-    std::map<int, MaskData> d_m;
 
+    EllipseDepthMap d_m_2;
+    EllipseDepthMap d_m;
+
+    /*
     for (typename decltype(ellipses)::iterator it = ellipses.begin(); it != ellipses.end(); ++it) {
         Eigen::Vector2i model_length;
         std::list<int> depths;
         std::tie(depths, model_length) = it->second;
         e.push_back(model_length);
-        Eigen::Vector2i *v = &e.back();
         for (typename decltype(depths)::iterator it = depths.begin(); it != depths.end(); ++it) {
-            d_e[*it] = *v;
+            d_e[*it] = e.back();
         }
     }
+    */
 
     for (typename decltype(mask)::iterator it = mask.begin(); it != mask.end(); ++it) {
-        MaskData m;
+        EllipseData m;
         std::list<int> depths;
         std::tie(depths, m) = it->second;
         mats.push_back(m);
@@ -399,7 +161,7 @@ int main(int argc, char *argv[])
     {
         std::ofstream ofs(filename);
         oarchive ar(ofs);
-        ar & d_e;
+        //ar & d_e;
         ar & d_m;
         ofs.close();
     }
@@ -407,14 +169,14 @@ int main(int argc, char *argv[])
     {
         std::ifstream ifs(filename);
         iarchive ar(ifs);
-        ar & d_e_2;
+        //ar & d_e_2;
         ar & d_m_2;
         ifs.close();
     }
 
+    /*
     for (typename decltype(d_e)::iterator it = d_e.begin(); it != d_e.end(); ++it) {
         if ((d_e_2[it->first]) != (it->second)) {
-
             std::cout << " ERROR E1" << std::endl;
             exit(-1);
         }
@@ -426,11 +188,12 @@ int main(int argc, char *argv[])
             exit(-1);
         }
     }
+    */
 
 
     for (typename decltype(d_m)::iterator it = d_m.begin(); it != d_m.end(); ++it) {
-        const MaskData &a = d_m_2[it->first];
-        const MaskData &b = it->second;
+        const EllipseData &a = d_m_2[it->first];
+        const EllipseData &b = it->second;
         cv::Mat a1, a3, aw;
         cv::Mat b1, b3, bw;
         int  apix, bpix;
@@ -449,8 +212,8 @@ int main(int argc, char *argv[])
     }
 
     for (typename decltype(d_m_2)::iterator it = d_m_2.begin(); it != d_m_2.end(); ++it) {
-        const MaskData &a = d_m[it->first];
-        const MaskData &b = it->second;
+        const EllipseData &a = d_m[it->first];
+        const EllipseData &b = it->second;
         cv::Mat a1, a3, aw;
         cv::Mat b1, b3, bw;
         int  apix, bpix;

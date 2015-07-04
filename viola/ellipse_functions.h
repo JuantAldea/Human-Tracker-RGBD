@@ -124,21 +124,21 @@ cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, con
             //e(x+1/2,y-1) > 0
             //row(xc-x, yc-y, width);
             cv::line(mask, cv::Point(xc - x, yc - y), cv::Point(xc - x + width, yc - y), value);
-            n_pixels += width;
+            n_pixels += width + 1;
             if (y != 0) {
                 //row(xc-x, yc+y, width);
                 cv::line(mask, cv::Point(xc - x, yc + y), cv::Point(xc - x + width, yc + y), value);
-                n_pixels += width;
+                n_pixels += width + 1;
             }
             incy();
         } else {
             //row(xc-x, yc-y, width);
             cv::line(mask, cv::Point(xc - x, yc - y), cv::Point(xc - x + width, yc - y), value);
-            n_pixels += width;
+            n_pixels += width + 1;
             if (y != 0) {
                 //row(xc-x, yc+y, width);
                 cv::line(mask, cv::Point(xc - x, yc + y), cv::Point(xc - x + width, yc + y), value);
-                n_pixels += width;
+                n_pixels += width + 1;
             }
             incx();
             incy();
@@ -148,7 +148,7 @@ cv::Mat fast_create_ellipse_mask(int xc, int yc, const int aa, const int bb, con
     if (b == 0) {
         //row(xc-a, yc, 2*a+1);
         cv::line(mask, cv::Point(xc - a, yc), cv::Point(xc - a + 2 * a + 1, yc), value);
-        n_pixels += 2 * a + 1;
+        n_pixels += 2 * a + 1 + 1;
     }
 
     if (n_dims == 1) {

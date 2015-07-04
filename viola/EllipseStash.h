@@ -8,12 +8,45 @@ using namespace std;
 #include "ellipse_functions.h"
 #include "ImageRegistration.h"
 #include "model_parameters.h"
-
+/*
 enum class BodyPart
 {
     HEAD = 0,
     TORSO = 1,
     CD = 2
+};
+*/
+
+/*
+#define STARTENUM() constexpr const int enumStart = __LINE__;
+#define ENUMITEM(Name) \
+struct Name {\
+    static constexpr const int id = __LINE__ - enumStart - 1;\
+    static constexpr const char* name = #Name;\
+};
+
+namespace BodyPart2 {
+STARTENUM()
+ENUMITEM(HEAD2)
+ENUMITEM(TORSO2)
+ENUMITEM(CD2)
+}
+*/
+
+#define BodyPartMacro(FOO) \
+FOO(HEAD) \
+FOO(TORSO) \
+FOO(CD)
+
+#define DO_DESCRIPTION(e)  #e,
+#define DO_ENUM(e)  e,
+
+char* BodyPart_description[] = {
+    BodyPartMacro(DO_DESCRIPTION)
+};
+
+enum class BodyPart {
+    BodyPartMacro(DO_ENUM)
 };
 
 
@@ -22,7 +55,6 @@ class EllipseStash
 public:
     using EllipseData = std::tuple<cv::Mat, cv::Mat, cv::Mat, int>;
     using EllipseDepthMap = std::map<int, EllipseData>;
-
 
     inline EllipseData &get_ellipse(const BodyPart part, const float depth)
     {
@@ -33,10 +65,11 @@ public:
             EllipseData &d = part_map[depth_rounded];
             d = build_ellipse(part, depth);
 
-            //printf("123 NUEVA %d\n", depth_rounded);
+            //printf("%s MODELO NUEVO %d\n", BodyPart_description[(int)part], depth_rounded);
             return d;
         }
-        //printf("123 REUSANDO %d\n",  depth_rounded);
+
+        //printf("%s MODELO REUSADO %d\n", BodyPart_description[(int)part], depth_rounded);
         return it->second;
     };
 
@@ -84,7 +117,7 @@ public:
         reg = r;
     }
 
-private:
+protected:
 
     inline EllipseData build_ellipse(const BodyPart part, const int depth)
     {
@@ -113,3 +146,31 @@ private:
     ImageRegistration reg;
 };
 
+#include "BoostSerializers.h"
+
+class EllipseStashLoader : public EllipseStash
+{
+public:
+    using EllipseData = std::tuple<cv::Mat, cv::Mat, cv::Mat, int>;
+    using EllipseDepthMap = std::map<int, EllipseData>;
+
+    EllipseStashLoader(const ImageRegistration &r) :
+        EllipseStash(r)
+    {
+        ;
+    }
+
+    EllipseStashLoader(const ImageRegistration &r, const std::vector<BodyPart> &parts, const std::vector<std::string> &filenames) :
+        EllipseStash(r)
+    {
+        assert(parts.size() == filenames.size());
+
+        for(size_t i = 0; i < parts.size(); i++){
+            EllipseDepthMap &part_map = body_part_ellipses[parts[i]];
+            std::ifstream ifs(filenames[i]);
+            boost::archive::binary_iarchive ar(ifs);
+            ar & part_map;
+            ifs.close();
+        }
+    };
+};

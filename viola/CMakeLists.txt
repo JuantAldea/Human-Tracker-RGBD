@@ -81,8 +81,13 @@ SET_TARGET_PROPERTIES(GeometryHelpers PROPERTIES LINKER_LANGUAGE CXX)
 ADD_LIBRARY(MiscHelpers STATIC misc_helpers.h)
 SET_TARGET_PROPERTIES(MiscHelpers PROPERTIES LINKER_LANGUAGE CXX)
 
+ADD_LIBRARY(BoostSerializers STATIC BoostSerializers.h)
+SET_TARGET_PROPERTIES(BoostSerializers PROPERTIES LINKER_LANGUAGE CXX)
+
 ADD_LIBRARY(FacesDetection STATIC faces_detection.cpp)
 ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
+
+
 
 #ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 
@@ -123,6 +128,7 @@ TARGET_LINK_LIBRARIES(model_projections_precalculator
     EllipseFunctions
     GeometryHelpers
     MiscHelpers
+    BoostSerializers
     ${MRPT_LIBS}
     ${OpenCV_LIBS}
     ${Boost_LIBRARIES}
@@ -130,14 +136,16 @@ TARGET_LINK_LIBRARIES(model_projections_precalculator
 
 
 TARGET_LINK_LIBRARIES(particle_filter_main
-    ImageParticleFilter
-    FacesDetection
     ${MRPT_LIBS}
     ${OpenCV_LIBS}
     ${TBB_LIBRARIES}
     ${freenect2_LIBRARY}
     ${OpenCL_LIBRARIES}
     ${DEPTH_REGISTRATION_LIBRARY}
+    ${Boost_LIBRARIES}
+
+    ImageParticleFilter
+    FacesDetection
     ImageRegistration
     EllipseFunctions
     ColorModel
@@ -147,6 +155,7 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     MultiTracker
     StateEstimation
     EllipseStash
+    BoostSerializers
 )
 
 #[[
