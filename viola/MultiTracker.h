@@ -109,22 +109,22 @@ struct MultiTracker {
                 //blended_color_model = estimated_new_state.color_model;
                 //particles.last_distance = estimated_state.average_z;
                 particles.last_distance = estimated_state.z;
+                particles.factor = 1;
+                particles.speed_factor = 1;
             }
 
             if (score > LIKEHOOD_UPDATE) {
             }
 
             if (score < LIKEHOOD_FOUND) {
-                /*
                 particles.init_particles(NUM_PARTICLES,
-                                  make_pair(estimated_state.x, estimated_state.radius_x), make_pair(estimated_state.y, estimated_state.radius_y),
+                                  make_pair(estimated_state.x, estimated_state.radius_x),
+                                  make_pair(estimated_state.y, estimated_state.radius_y),
                                   make_pair(float(estimated_state.z), 100.f),
                                   make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS),
-                                  reg, &ellipses
-                                 );
-                estimated_state.factor *= 1.2;
-                */
+                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS));
+                particles.factor *= 1.2;
+                particles.speed_factor = 0;
 
             }
         }
@@ -135,18 +135,25 @@ struct MultiTracker {
         const size_t N = trackers.size();
         for (size_t i = 0; i < N; i++) {
             const CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
-            //const StateEstimation &estimated_state = new_states[i];
             const StateEstimation &estimated_state = states[i];
             const StateEstimation &estimated_new_state = new_states[i];
 
-            if (estimated_state.score_total > LIKEHOOD_FOUND) {
+            if (estimated_new_state.score_total >= LIKEHOOD_FOUND) {
                 cv::ellipse(color_display_frame, estimated_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(0, 255, 0), -1, 8, 0);
                 cv::ellipse(color_display_frame, estimated_state.center, cv::Size(estimated_state.radius_x, estimated_state.radius_y), 0, 0, 360, cv::Scalar(0, 0, 255), 3, 8, 0);
             }
 
-            if (estimated_state.score_total > LIKEHOOD_UPDATE) {
-                cv::ellipse(color_display_frame, estimated_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(255, 255, 255), -1, 8, 0);
-                cv::ellipse(color_display_frame, estimated_state.center, cv::Size(estimated_state.radius_x, estimated_state.radius_y), 0, 0, 360, cv::Scalar(255, 255, 255), 3, 8, 0);
+            if (estimated_new_state.score_total > LIKEHOOD_UPDATE) {
+                //cv::ellipse(color_display_frame, estimated_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(255, 255, 255), -1, 8, 0);
+                //cv::ellipse(color_display_frame, estimated_state.center, cv::Size(estimated_state.radius_x, estimated_state.radius_y), 0, 0, 360, cv::Scalar(255, 255, 255), 3, 8, 0);
+            }
+
+            if (estimated_new_state.score_total < LIKEHOOD_FOUND) {
+                cv::ellipse(color_display_frame, estimated_new_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(0, 255, 255), -1, 8, 0);
+                cv::ellipse(color_display_frame, estimated_new_state.center, cv::Size(estimated_new_state.radius_x, estimated_new_state.radius_y), 0, 0, 360, cv::Scalar(0, 255, 255), 3, 8, 0);
+
+                cv::ellipse(color_display_frame, estimated_state.center, cv::Size(3, 3), 0, 0, 360, cv::Scalar(0, 255, 0), -1, 8, 0);
+                cv::ellipse(color_display_frame, estimated_state.center, cv::Size(estimated_state.radius_x, estimated_state.radius_y), 0, 0, 360, cv::Scalar(0, 0, 255), 3, 8, 0);
             }
 
 

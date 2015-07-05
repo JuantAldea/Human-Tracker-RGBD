@@ -96,7 +96,8 @@ public:
     float last_distance;
     int64_t last_time;
     const vector<Eigen::Vector2f> *shape_model;
-
+    float factor;
+    float speed_factor;
 #ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;
