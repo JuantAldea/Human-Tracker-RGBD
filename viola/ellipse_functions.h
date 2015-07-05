@@ -272,13 +272,13 @@ float ellipse_contour_test(const cv::Point &center, const float radius_x, const 
         std::cout << pixel_coordinates_3_x << ' ' << pixel_coordinates_3_y << std::endl;
         std::cout << pixel_coordinates_4_x << ' ' << pixel_coordinates_4_y << std::endl;
         */
-        const cv::Vec2f &gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1_y,
+        const cv::Vec2f gradient_v1 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_1_y,
                                        pixel_coordinates_1_x);
-        const cv::Vec2f &gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2_y,
+        const cv::Vec2f gradient_v2 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_2_y,
                                        pixel_coordinates_2_x);
-        const cv::Vec2f &gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3_y,
+        const cv::Vec2f gradient_v3 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_3_y,
                                        pixel_coordinates_3_x);
-        const cv::Vec2f &gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4_y,
+        const cv::Vec2f gradient_v4 = gradient_vectors.at<cv::Vec2f>(pixel_coordinates_4_y,
                                        pixel_coordinates_4_x);
 
         float magnitude_v1;
