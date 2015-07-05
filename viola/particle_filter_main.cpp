@@ -147,8 +147,8 @@ int particle_filter()
     //Cascades initialization
     string face_cascade_name = "../cascades/lbpcascade_frontalface.xml";
     string eyes_cascade_name = "../cascades/haarcascade_eye_tree_eyeglasses.xml";
-    cv::CascadeClassifier face_cascade;
-    cv::CascadeClassifier eyes_cascade;
+    cv::ocl::OclCascadeClassifier face_cascade;
+    cv::ocl::OclCascadeClassifier eyes_cascade;
 
     if (!face_cascade.load(face_cascade_name)) {
         printf("--(!)Error loading\n");
@@ -193,7 +193,8 @@ int particle_filter()
         exit(-1);
     }
 
-    listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+    //listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
+    listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Depth);
     dev->setColorFrameListener(listener);
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
@@ -300,8 +301,17 @@ int particle_filter()
     }
     */
 
+    time_t start, end;
+    int counter = 0;
+    double sec;
+    double fps;
 
     while (!mrpt::system::os::kbhit()) {
+
+        if (counter == 0){
+            time(&start);
+        }
+
         // Adquisition
         listener->waitForNewFrame(frames_kinect2);
         libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
@@ -323,11 +333,15 @@ int particle_filter()
         color_frame = color_mat;
         depth_frame = registered_depth;
 
-        cv::Mat hsv_frame;
-        cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
+        cv::ocl::oclMat ocl_hsv_frame;
+        cv::ocl::oclMat ocl_color_frame(color_frame);
+        cv::ocl::cvtColor(ocl_color_frame, ocl_hsv_frame, cv::COLOR_BGR2HSV);
+        cv::Mat hsv_frame = ocl_hsv_frame;
+        //cv::Mat hsv_frame;
+        //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
 
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
-        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_display_frame);
+        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
 
         /*
         cv::Mat gradient_vectors_depth, gradient_magnitude_depth, gradient_magnitude_scaled_depth;
@@ -392,6 +406,7 @@ int particle_filter()
 
             //cv::circle(color_display_frame, center, circles[circle_max][2], cv::Scalar(0, 255, 255), -1, 8, 0);
 
+            //TODO CHANGE TO AVERAGE DEPTH
             const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x));
             if (center_depth == 0){
                 continue;
@@ -402,6 +417,9 @@ int particle_filter()
 
         class_trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
         class_trackers.update(ellipses);
+
+#define VISUALIZATION
+#ifdef VISUALIZATION
         class_trackers.show(color_display_frame, depth_frame);
 
         if (class_trackers.states.size()){
@@ -438,10 +456,28 @@ int particle_filter()
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
         gradient_color_window.showImage(gradient_magnitude_image);
+
+
+
+        {
+            std::ostringstream oss;
+            oss << "FPS " << fps;
+
+            int fontFace =  cv::FONT_HERSHEY_PLAIN;
+            double fontScale = 2;
+            int thickness = 2;
+
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
+            cv::Point textOrg(color_display_frame.cols - 100, color_display_frame.cols - textSize.height * 0.5f - 50);
+            putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+        }
+
+
         CImage color_display_image;
         color_display_image.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(color_display_image);
-
+#endif
 #ifdef VIEW_3D
         //--- 3D view stuff
         create_cloud(color_frame, depth_frame, 1.0/1000.0f, reg, scene_points_map);
@@ -470,6 +506,18 @@ int particle_filter()
         win3D.unlockAccess3DScene();
         win3D.repaint();
 #endif
+        counter++;
+        if (counter > 30){
+            time(&end);
+            sec = difftime(end, start);
+            fps = counter/sec;
+            printf("%.2f fps\n", fps);
+        }
+
+        if (counter == (INT_MAX - 1000)){
+            counter = 0;
+        }
+
         listener->release(frames_kinect2);
     }
 

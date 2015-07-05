@@ -6,7 +6,7 @@
 IGNORE_WARNINGS_PUSH
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-
+#include <opencv2/ocl/ocl.hpp>
 IGNORE_WARNINGS_POP
 #include <cassert>
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
@@ -182,55 +182,59 @@ cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
 
-    cv::Mat orig = image.clone();
-    //cv::GaussianBlur(orig, orig, cv::Size(25, 25), 0, 0, cv::BORDER_DEFAULT);
-    //cv::medianBlur(orig, orig, 7);
-    cv::Mat image_gray;
+#define OPENCL_OCL
+#ifdef OPENCL_OCL
+    using TYPE_MAT = cv::ocl::oclMat;
+    namespace TYPE_OP = cv::ocl;
+#else
+    using TYPE_MAT = cv::Mat;
+    namespace TYPE_OP = cv;
+#endif
+
+    TYPE_MAT orig(image);
+    TYPE_MAT image_gray;
+
     if (image.channels() > 1){
-        cvtColor(orig, image_gray, CV_RGB2GRAY);
+        TYPE_OP::cvtColor(orig, image_gray, CV_RGB2GRAY);
     }else{
-        image_gray = orig.clone();
+        image_gray = orig;
     }
 
-    cv::Mat grad_x, grad_y;
-    cv::Mat squared_grad_x, squared_grad_y;
-    cv::Mat gradient_modulus;
-    cv::Mat image_gray_float;
+    //TYPE_MAT image_gray_aux;
+    //TYPE_OP::bilateralFilter(image_gray, image_gray_aux, 15, 80, 80);
+    //image_gray = image_gray_aux;
 
-    //cv::Mat image_gray2;
-    //bilateralFilter (image_gray, image_gray2, 15, 80, 80);
-    //image_gray = image_gray2;
-
+    TYPE_MAT image_gray_float;
     image_gray.convertTo(image_gray_float, CV_32F);
-    cv::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
-    cv::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
-    //cv::medianBlur ( grad_x, grad_x, 5 );
-    //cv::medianBlur ( grad_y, grad_y, 5 );
 
-    cv::Mat grad_x_float, grad_y_float;
-    grad_x.convertTo(grad_x_float, CV_32F);
-    grad_y.convertTo(grad_y_float, CV_32F);
-    cv::pow(grad_x_float, 2.f, squared_grad_x);
-    cv::pow(grad_y_float, 2.f, squared_grad_y);
-    //return std::make_tuple(cv::Mat(), cv::Mat(), cv::Mat());
-    cv::sqrt(squared_grad_x + squared_grad_y, gradient_modulus);
-    cv::Mat gradient_modulus_copy = gradient_modulus.clone();
-    cv::threshold(gradient_modulus_copy, gradient_modulus, 1000, 0, cv::THRESH_TOZERO);
 
-    grad_x_float /= gradient_modulus;
-    grad_y_float /= gradient_modulus;
-    //std::vector<cv::Mat> gradients = {grad_x_float, grad_y_float};
+    TYPE_MAT grad_x, grad_y;
+    TYPE_OP::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
+    TYPE_OP::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
 
-    cv::Mat gradient_vectors;
-    cv::merge(std::vector<cv::Mat> {grad_x_float, grad_y_float}, gradient_vectors);
+    TYPE_MAT gradient_modulus;
+    TYPE_OP::magnitude(grad_x, grad_y, gradient_modulus);
 
-    cv::Mat gradient_modulus_scaled;
+    grad_x /= gradient_modulus;
+    grad_y /= gradient_modulus;
+
+    TYPE_MAT gradient_modulus_copy = gradient_modulus.clone();
+    TYPE_OP::threshold(gradient_modulus_copy, gradient_modulus, 1000, 0, cv::THRESH_TOZERO);
+
     double min, max;
-    cv::minMaxLoc(gradient_modulus, &min, &max);
-    cv::convertScaleAbs(gradient_modulus, gradient_modulus_scaled, 255/max);
+    TYPE_OP::minMaxLoc(gradient_modulus, &min, &max);
+    TYPE_MAT gradient_modulus_scaled;
+    gradient_modulus.convertTo(gradient_modulus_scaled, CV_8UC1, 255 / max);
 
-    //cv::ellipse2Poly(cv::Mat(), cv::Point(), cv::Size(), 360, 0, 0, cv::Scalar(255, 0, 0), 1, 0);
-    return std::make_tuple(gradient_vectors, gradient_modulus, gradient_modulus_scaled);
+    TYPE_MAT gradient_vectors;
+    TYPE_OP::merge(std::vector<TYPE_MAT> {grad_x, grad_y}, gradient_vectors);
+
+    //going back to CPU.
+    cv::Mat cpu_gradient_vectors = gradient_vectors;
+    cv::Mat cpu_gradient_modulus = gradient_modulus;
+    cv::Mat cpu_gradient_modulus_scaled = gradient_modulus_scaled;
+
+    return std::make_tuple(cpu_gradient_vectors, cpu_gradient_modulus, cpu_gradient_modulus_scaled);
 }
 
 /*
