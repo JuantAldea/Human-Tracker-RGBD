@@ -3,10 +3,11 @@
 
 ImageRegistration::ImageRegistration() :
     sizeColor(1920, 1080), sizeIr(512, 424), depthShift(0), maxDepth(12.0),
+    lookupX(cv::Mat(1, sizeColor.width, CV_32F)),
+    lookupY(cv::Mat(1, sizeColor.height, CV_32F)),
     depthRegHighRes(DepthRegistration::New(DepthRegistration::OPENCL))
 {
-    lookupY = cv::Mat(1, sizeColor.height, CV_32F);
-    lookupX = cv::Mat(1, sizeColor.width, CV_32F);
+    ;
 }
 
 ImageRegistration::~ImageRegistration()

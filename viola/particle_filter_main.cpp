@@ -145,20 +145,34 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale,
 int particle_filter()
 {
     //Cascades initialization
-    string face_cascade_name = "../cascades/lbpcascade_frontalface.xml";
+    //string face_cascade_name = "../cascades/lbpcascade_frontalface.xml";
+    string face_cascade_name = "../cascades/haarcascade_frontalface_default.xml";
     string eyes_cascade_name = "../cascades/haarcascade_eye_tree_eyeglasses.xml";
-    cv::ocl::OclCascadeClassifier face_cascade;
-    cv::ocl::OclCascadeClassifier eyes_cascade;
+    cv::ocl::OclCascadeClassifier ocl_face_cascade;
+    cv::ocl::OclCascadeClassifier ocl_eyes_cascade;
+    cv::CascadeClassifier face_cascade;
+    cv::CascadeClassifier eyes_cascade;
 
     if (!face_cascade.load(face_cascade_name)) {
-        printf("--(!)Error loading\n");
+        printf("--(!)Error loading %s\n", face_cascade_name.c_str());
         return -1;
     }
 
     if (!eyes_cascade.load(eyes_cascade_name)) {
-        printf("--(!)Error loading\n");
+        printf("--(!)Error loading %s\n", eyes_cascade_name.c_str());
         return -1;
     }
+
+    if (!ocl_face_cascade.load(face_cascade_name)) {
+        printf("--(!)Error loading %s\n", face_cascade_name.c_str());
+        return -1;
+    }
+
+    if (!ocl_eyes_cascade.load(eyes_cascade_name)) {
+        printf("--(!)Error loading %s\n", eyes_cascade_name.c_str());
+        return -1;
+    }
+
 
 
     if (freenect2.enumerateDevices() == 0) {
@@ -168,9 +182,17 @@ int particle_filter()
 
     //kinect2 initialization
     std::string serial = freenect2.getDefaultDeviceSerialNumber();
+    
 
     char *calib_dir = getenv("HOME");
     std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
+
+    //Registration initialization
+    ImageRegistration reg;
+    reg.init(calib_path, serial);
+
+    //load or precompute ellipses projections
+    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.400000x0.600000.bin"});
 
     pipeline = new libfreenect2::OpenCLPacketPipeline();
 
@@ -199,9 +221,6 @@ int particle_filter()
     dev->setIrAndDepthFrameListener(listener);
     dev->start();
 
-    //Registration initialization
-    ImageRegistration reg;
-    reg.init(calib_path, serial);
 
     /*
     struct sigaction sigIntHandler;
@@ -288,19 +307,6 @@ int particle_filter()
 
     MultiTracker<DEPTH_TYPE> trackers(reg);
 
-    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.400000x0.600000.bin"});
-    //EllipseStash ellipses(reg);
-    /*
-    for (int z = 0; z < 5000; z++){
-        ellipses.get_ellipse(BodyPart::HEAD, z);
-    }
-    */
-    /*
-    for (int z = 0; z < 5000; z++){
-        ellipses.get_ellipse(BodyPart::TORSO, z);
-    }
-    */
-
     time_t start, end;
     int counter = 0;
     double sec;
@@ -313,6 +319,7 @@ int particle_filter()
         }
 
         // Adquisition
+        uint64_t read_kinect_t0 = cv::getTickCount();
         listener->waitForNewFrame(frames_kinect2);
         libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
         libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
@@ -320,35 +327,52 @@ int particle_filter()
 
         cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
         cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
-        std::cout << "ADQUIRED\n";
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
+        
+        uint64_t read_kinect_t1 = cv::getTickCount();
+        std::cout << "TIMES_READ_KINECT " << (read_kinect_t1 - read_kinect_t0) / double(cv::getTickFrequency()) << std::endl;
 
         //Registration
+        uint64_t registration_t0 = cv::getTickCount();
+        
         cv::Mat registered_depth;
         reg.register_images(color_mat, depth_mat, registered_depth);
         cv::flip(color_mat, color_mat, 1);
-
         color_display_frame = color_mat.clone();
+
+        uint64_t registration_t1 = cv::getTickCount();
+
+        std::cout << "TIMES_REGISTRATION " << (registration_t1 - registration_t0) / double(cv::getTickFrequency()) << std::endl;
 
         // Observation building
         color_frame = color_mat;
         depth_frame = registered_depth;
-
+        
+        /*
         cv::ocl::oclMat ocl_hsv_frame;
         cv::ocl::oclMat ocl_color_frame(color_frame);
         cv::ocl::cvtColor(ocl_color_frame, ocl_hsv_frame, cv::COLOR_BGR2HSV);
         cv::Mat hsv_frame = ocl_hsv_frame;
+        */
+        
+        cv::Mat hsv_frame;
+        cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
+        
+        cv::Mat gray_frame;
+        cvtColor(color_frame, gray_frame, CV_RGB2GRAY);
+        
         //cv::Mat hsv_frame;
         //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
 
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
-        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(color_frame);
+        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(gray_frame);
 
         /*
         cv::Mat gradient_vectors_depth, gradient_magnitude_depth, gradient_magnitude_scaled_depth;
         std::tie(gradient_vectors_depth, gradient_magnitude_depth, gradient_magnitude_scaled_depth) = sobel_operator(depth_frame);
         */
 
+        uint64_t observation_t0 = cv::getTickCount();
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
         CObservationImagePtr obsImage_depth = CObservationImage::Create();
@@ -377,17 +401,28 @@ int particle_filter()
         observation.insert(obsImage_depth);
         observation.insert(obsImage_gradient_vectors);
         observation.insert(obsImage_gradient_magnitude);
+        uint64_t observation_t1 = cv::getTickCount();
 
+        std::cout << "TIMES_OBSERVATION " << (observation_t1 - observation_t0) / double(cv::getTickFrequency()) << std::endl;
         // Tracking
         std::vector<cv::Vec3f> circles;
 //#define CIRCLES
 #ifdef CIRCLES
         circles = viola_faces::detect_circles(color_frame);
 #else
-        std::vector<viola_faces::face> caras = viola_faces::detect_faces(color_frame, face_cascade, eyes_cascade);
+        uint64_t viola_t0 = cv::getTickCount();
+        
+        //cv::ocl::oclMat ocl_gray_frame(gray_frame);
+        //std::vector<viola_faces::face> caras = viola_faces::detect_faces(ocl_gray_frame, ocl_face_cascade, ocl_eyes_cascade, 2.0);
+        std::vector<viola_faces::face> caras = viola_faces::detect_faces(gray_frame, face_cascade, eyes_cascade, 1);
+        
+        uint64_t viola_t1 = cv::getTickCount();
+        std::cout << "TIMES_VIOLA " << (viola_t1 - viola_t0) / double(cv::getTickFrequency()) << std::endl;
+        
         for (auto &cara : caras){
             circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
         }
+        
         viola_faces::print_faces(caras, color_display_frame, 1, 1);
 #endif
         if (circles.size() != 0) {
@@ -417,9 +452,12 @@ int particle_filter()
             trackers.insert_tracker(center, center_depth, hsv_frame, depth_frame, ellipses);
         }
 
+        uint64_t tracking_t0 = cv::getTickCount();
         trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
         trackers.update(ellipses);
         trackers.delete_missing();
+        uint64_t tracking_t1 = cv::getTickCount();
+        std::cout << "TIMES_TRACKING " << (tracking_t1 - tracking_t0) / double(cv::getTickFrequency()) << std::endl;
 
 #define VISUALIZATION
 #ifdef VISUALIZATION
@@ -445,16 +483,16 @@ int particle_filter()
         }
 
         //visualization
-        cv::Mat depthDisp;
-        dispDepth(registered_depth, depthDisp, 12000.0f);
-        cv::Mat combined;
-        combine(color_mat, depthDisp, combined);
-        cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
-        cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
+        //cv::Mat depthDisp;
+        //dispDepth(registered_depth, depthDisp, 12000.0f);
+        //cv::Mat combined;
+        //combine(color_mat, depthDisp, combined);
+        //cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
+        //cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
 
-        CImage registered_depth_image;
-        registered_depth_image.loadFromIplImage(new IplImage(combined));
-        registered_color_window.showImage(registered_depth_image);
+        //CImage registered_depth_image;
+        //registered_depth_image.loadFromIplImage(new IplImage(combined));
+        //registered_color_window.showImage(registered_depth_image);
 
         CImage gradient_magnitude_image;
         gradient_magnitude_image.loadFromIplImage(new IplImage(gradient_magnitude_scaled));
@@ -480,7 +518,7 @@ int particle_filter()
         CImage color_display_image;
         color_display_image.loadFromIplImage(new IplImage(color_display_frame));
         image.showImage(color_display_image);
-#endif
+
 #ifdef VIEW_3D
         //--- 3D view stuff
         create_cloud(color_frame, depth_frame, 1.0/1000.0f, reg, scene_points_map);
@@ -508,6 +546,7 @@ int particle_filter()
         //model_center_points->loadFromPointsMap(&model_center_points_map);
         win3D.unlockAccess3DScene();
         win3D.repaint();
+#endif
 #endif
         counter++;
         if (counter > 30){

@@ -206,7 +206,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         for (size_t i = 0; i < N; i++) {
             const ParticleType &particle = particles_valid_roi[i];
             const Eigen::Vector3f particle_3D = point_3D_reprojection(particle.d->x, particle.d->y, particle.d->z, registration->lookupX, registration->lookupY);
-            cout << particle_3D << endl;
+            //cout << particle_3D[0] << ' '  << << particle_3D[1] << ' '  << particle_3D[2] << ' '  << endl;
             const Eigen::Vector3f particle_3D_upper = particle_3D + Eigen::Vector3f(0, 45, 0);
             const Eigen::Vector2i particle_2D_upper = point_3D_projection(particle_3D_upper, fx, fy, cx, cy);
             const Eigen::Vector3f particle_2D_D_upper = Eigen::Vector3f(particle_2D_upper[0], particle_2D_upper[1], particle.d->z);

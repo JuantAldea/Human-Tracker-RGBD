@@ -179,9 +179,9 @@ cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
 }
 
 
+
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 {
-
 #define OPENCL_OCL
 #ifdef OPENCL_OCL
     using TYPE_MAT = cv::ocl::oclMat;
@@ -190,50 +190,91 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     using TYPE_MAT = cv::Mat;
     namespace TYPE_OP = cv;
 #endif
+    
+    int64_t t0 = cv::getTickCount();
 
     TYPE_MAT orig(image);
     TYPE_MAT image_gray;
-
+    
+    int64_t t1 = cv::getTickCount();
+    
     if (image.channels() > 1){
         TYPE_OP::cvtColor(orig, image_gray, CV_RGB2GRAY);
     }else{
         image_gray = orig;
     }
+    int64_t t2 = cv::getTickCount();
 
-    //TYPE_MAT image_gray_aux;
-    //TYPE_OP::bilateralFilter(image_gray, image_gray_aux, 15, 80, 80);
-    //image_gray = image_gray_aux;
+//#define USE_BILINEAR
+#ifdef USE_BILINEAR
+    TYPE_MAT image_gray_aux;
+    TYPE_OP::bilateralFilter(image_gray, image_gray_aux, 15, 80, 80);
+    image_gray = image_gray_aux;
+#endif
 
     TYPE_MAT image_gray_float;
     image_gray.convertTo(image_gray_float, CV_32F);
-
-
+    
+    int64_t t3 = cv::getTickCount();
+    
     TYPE_MAT grad_x, grad_y;
     TYPE_OP::Sobel(image_gray_float, grad_x, CV_32F, 1, 0, 7, 1, 0, cv::BORDER_DEFAULT);
     TYPE_OP::Sobel(image_gray_float, grad_y, CV_32F, 0, 1, 7, 1, 0, cv::BORDER_DEFAULT);
-
+    
+    int64_t t4 = cv::getTickCount();
+    
     TYPE_MAT gradient_modulus;
     TYPE_OP::magnitude(grad_x, grad_y, gradient_modulus);
-
+    
+    int64_t t5 = cv::getTickCount();
+    
     grad_x /= gradient_modulus;
     grad_y /= gradient_modulus;
 
+    int64_t t6 = cv::getTickCount();
+
     TYPE_MAT gradient_modulus_copy = gradient_modulus.clone();
     TYPE_OP::threshold(gradient_modulus_copy, gradient_modulus, 1000, 0, cv::THRESH_TOZERO);
-
+    
+    int64_t t7 = cv::getTickCount();
+    
     double min, max;
     TYPE_OP::minMaxLoc(gradient_modulus, &min, &max);
     TYPE_MAT gradient_modulus_scaled;
     gradient_modulus.convertTo(gradient_modulus_scaled, CV_8UC1, 255 / max);
 
+    int64_t t8 = cv::getTickCount();
+
     TYPE_MAT gradient_vectors;
     TYPE_OP::merge(std::vector<TYPE_MAT> {grad_x, grad_y}, gradient_vectors);
+    
+    int64_t t9 = cv::getTickCount();
+
 
     //going back to CPU.
     cv::Mat cpu_gradient_vectors = gradient_vectors;
     cv::Mat cpu_gradient_modulus = gradient_modulus;
     cv::Mat cpu_gradient_modulus_scaled = gradient_modulus_scaled;
+    
+    int64_t t10 = cv::getTickCount();
+    
+    const float inv_freq = 1.0/cv::getTickFrequency();
+    const double t1_0 = (t1 - t0) * inv_freq;
+    const double t2_1 = (t2 - t1) * inv_freq;
+    const double t3_2 = (t3 - t2) * inv_freq;
+    const double t4_3 = (t4 - t3) * inv_freq;
+    const double t5_4 = (t5 - t4) * inv_freq;
+    const double t6_5 = (t6 - t5) * inv_freq;
+    const double t7_6 = (t7 - t6) * inv_freq;
+    const double t8_7 = (t8 - t7) * inv_freq;
+    const double t9_8 = (t9 - t8) * inv_freq;
+    const double t10_9 = (t10 - t9) * inv_freq;
 
+    const double t10_0 = (t10 - t0) * inv_freq;
+    
+    std::cout << "TIMES_SOBEL " << t10_0 << ',' << t1_0 << ',' << t2_1 << ',' << t3_2 << ',' << t4_3 << ',' << t5_4 << ',' << t6_5 << ',' << t7_6 << ',' << t8_7 << ',' << t9_8 << ',' << t10_9 << std::endl;
+
+    
     return std::make_tuple(cpu_gradient_vectors, cpu_gradient_modulus, cpu_gradient_modulus_scaled);
 }
 

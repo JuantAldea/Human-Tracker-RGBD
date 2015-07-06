@@ -46,7 +46,7 @@ struct MultiTracker {
         };
 
         if (states.size()){
-            return;
+            //return;
         }
 
         if (already_tracked(100)) {

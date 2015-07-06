@@ -165,12 +165,20 @@ public:
     {
         assert(parts.size() == filenames.size());
 
-        for(size_t i = 0; i < parts.size(); i++){
+        for (size_t i = 0; i < parts.size(); i++) {
             EllipseDepthMap &part_map = body_part_ellipses[parts[i]];
             std::ifstream ifs(filenames[i]);
-            boost::archive::binary_iarchive ar(ifs);
-            ar & part_map;
-            ifs.close();
+            if (ifs.is_open()) {
+                std::cout << "Reading file " << filenames[i] << " for boddy part " << BodyPart_description[(int)parts[i]] << std::endl;
+                boost::archive::binary_iarchive ar(ifs);
+                ar & part_map;
+                ifs.close();
+            } else {
+                std::cout << "Generating ellipses for body part: " << BodyPart_description[(int)parts[i]] << std::endl;
+                for (int z = 0; z < 5000; z++){
+                    this->get_ellipse(parts[i], z);
+                }
+            }
         }
     };
 };
