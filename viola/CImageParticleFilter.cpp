@@ -6,7 +6,7 @@
 template<typename DEPTH_TYPE>
 CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, ImageRegistration *reg, normal_dist *normal_distribution) :
     ellipses(ellipses),
-    registration_data(reg),
+    registration(reg),
     depth_normal_distribution(normal_distribution)
 {
     object_found = true;
@@ -155,6 +155,7 @@ cv::Mat compute_valid_particle_color_model(const typename CImageParticleFilter<D
 
     return compute_color_model2(particle_roi_img, mask_weights);
 }
+
 template<typename DEPTH_TYPE>
 float compute_valid_particle_ellipse_fitting(const typename CImageParticleFilter<DEPTH_TYPE>::ParticleType &particle,
                                              const cv::Mat &gradient_vectors, const cv::Mat &gradient_magnitude,
@@ -193,6 +194,36 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     }
 
     size_t N = particles_valid_roi.size();
+
+    std::vector<Eigen::Vector3f> particles_head(N);
+
+    {
+        const float fx = registration->cameraMatrixColor.at<double>(0, 0);
+        const float fy = registration->cameraMatrixColor.at<double>(1, 1);
+        const float cx = registration->cameraMatrixColor.at<double>(0, 2);
+        const float cy = registration->cameraMatrixColor.at<double>(1, 2);
+
+        for (size_t i = 0; i < N; i++) {
+            const ParticleType &particle = particles_valid_roi[i];
+            const Eigen::Vector3f particle_3D = point_3D_reprojection(particle.d->x, particle.d->y, particle.d->z, registration->lookupX, registration->lookupY);
+            cout << particle_3D << endl;
+            const Eigen::Vector3f particle_3D_upper = particle_3D + Eigen::Vector3f(0, 45, 0);
+            const Eigen::Vector2i particle_2D_upper = point_3D_projection(particle_3D_upper, fx, fy, cx, cy);
+            const Eigen::Vector3f particle_2D_D_upper = Eigen::Vector3f(particle_2D_upper[0], particle_2D_upper[1], particle.d->z);
+            const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, particle.d->z);
+            const cv::Rect particle_roi = cv::Rect(cvRound(particle_2D_upper[0] - ellipse_axes.width * 0.5f),
+                                                   cvRound(particle_2D_upper[1] - ellipse_axes.height * 0.5f),
+                                                   ellipse_axes.width, ellipse_axes.height);
+
+            const bool valid = rect_fits_in_frame(particle_roi, frame_hsv);
+        }
+    }
+    /*
+    for (size_t i = 0; i < N; i++) {
+        const ParticleType &particle = particles_valid_roi[i];
+        particles_3D.push_back(point_3D_reprojection(particle.d->x, particle.d->y, particle.d->z, registration->lookupX, registration->lookupY))
+    }
+    */
 
     vector<cv::Mat> particles_color_model(N);
     vector<float> particles_ellipse_fitting(N);

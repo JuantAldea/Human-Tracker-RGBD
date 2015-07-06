@@ -152,10 +152,10 @@ cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const fl
 ////////////////////////////////
 
 //TODO float depth templated?
-inline Vector3f point_3D_reprojection (const Vector2f &v, const float depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
+inline Vector3f point_3D_reprojection (const float p_x, const float p_y, const float depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
 {
-    const float x = lookupX.at<float>(0, v[0]);
-    const float y = lookupY.at<float>(0, v[1]);
+    const float x = lookupX.at<float>(0, cvRound(p_x));
+    const float y = lookupY.at<float>(0, cvRound(p_y));
     register const float depth_metters = depth / 1000.0f;
 
     // Check for invalid measurements
@@ -169,6 +169,12 @@ inline Vector3f point_3D_reprojection (const Vector2f &v, const float depth, con
 
     return Vector3f(x_coord, y_coord, z_coord);
 }
+
+inline Vector3f point_3D_reprojection (const Vector2f &v, const float depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
+{
+    return point_3D_reprojection(v[0], v[1], depth, lookupX, lookupY);
+}
+
 
 template<typename DEPTH_TYPE>
 inline Vector3f point_3D_reprojection(const Vector2f &v, const cv::Mat &depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
@@ -236,9 +242,8 @@ inline Vector2i point_3D_projection(const Vector3f &v, const float fx, const flo
 
 
 template<typename DEPTH_TYPE>
-inline std::tuple<Vector2i, Vector2i>
-    project_model(const Vector2f &model_center, const cv::Mat &depth, const Vector2f &model_semi_axes,
-    const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY)
+inline std::tuple<Vector2i, Vector2i> project_model(const Vector2f &model_center, const cv::Mat &depth,
+    const Vector2f &model_semi_axes, const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY)
 {
     return project_model(model_center, depth.at<DEPTH_TYPE>(model_center[1], model_center[0]),
         model_semi_axes, cameraMatrix, lookupX, lookupY);

@@ -117,7 +117,7 @@ protected:
 
     const vector<Eigen::Vector2f> *shape_model;
     EllipseStash *ellipses;
-    ImageRegistration *registration_data;
+    ImageRegistration *registration;
     boost::math::normal_distribution<float> *depth_normal_distribution;
 };
 
