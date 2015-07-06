@@ -286,7 +286,7 @@ int particle_filter()
     CParticleFilter PF;
     PF.m_options = PF_options;
 
-    MultiTracker<DEPTH_TYPE> class_trackers(reg);
+    MultiTracker<DEPTH_TYPE> trackers(reg);
 
     EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.400000x0.600000.bin"});
     //EllipseStash ellipses(reg);
@@ -320,6 +320,7 @@ int particle_filter()
 
         cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
         cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
+        std::cout << "ADQUIRED\n";
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
 
         //Registration
@@ -400,6 +401,7 @@ int particle_filter()
                     circle_max = i;
                 }
             }
+
             std::cout << "CIRCLES FOUND " << circles.size() << std::endl;
 
             cv::Point center(cvRound(circles[circle_max][0]), cvRound(circles[circle_max][1]));
@@ -412,27 +414,28 @@ int particle_filter()
                 continue;
             }
 
-            class_trackers.insert_tracker(center, center_depth, hsv_frame, depth_frame, ellipses);
+            trackers.insert_tracker(center, center_depth, hsv_frame, depth_frame, ellipses);
         }
 
-        class_trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
-        class_trackers.update(ellipses);
+        trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
+        trackers.update(ellipses);
+        trackers.delete_missing();
 
 #define VISUALIZATION
 #ifdef VISUALIZATION
-        class_trackers.show(color_display_frame, depth_frame);
+        trackers.show(color_display_frame, depth_frame);
 
-        if (class_trackers.states.size()){
+        if (trackers.states.size()){
             CImage model_image;
-            model_image.loadFromIplImage(new IplImage(color_frame(class_trackers.states[0].region)));
+            model_image.loadFromIplImage(new IplImage(color_frame(trackers.states[0].region)));
             model_image_window.showImage(model_image);
 
             CImage model_histogram_image;
-            model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(class_trackers.states[0].color_model, 10)));
+            model_histogram_image.loadFromIplImage(new IplImage(histogram_to_image(trackers.states[0].color_model, 10)));
             model_histogram_window.showImage(model_histogram_image);
 
             /*
-            const cv::Mat mask_weight = ellipses->get_ellipse_mask_weights(class_trackers.states[0].z);
+            const cv::Mat mask_weight = ellipses->get_ellipse_mask_weights(trackers.states[0].z);
             cv::Mat m;
             mask_weight *= 255;
             mask_weight.convertTo(m, CV_8UC1);
@@ -538,18 +541,18 @@ int main(int argc, char *argv[])
     }
 
     if (argc > 2) {
-        TRANSITION_MODEL_STD_XY = atof(argv[2]);
+        MODEL_TRANSITION_STD_XY = atof(argv[2]);
     } else {
-        TRANSITION_MODEL_STD_XY = 10;
+        MODEL_TRANSITION_STD_XY = 10;
     }
 
     if (argc > 3) {
-        TRANSITION_MODEL_STD_VXY  = atof(argv[3]);
+        MODEL_TRANSITION_STD_VXY  = atof(argv[3]);
     } else {
-        TRANSITION_MODEL_STD_VXY  = 10;
+        MODEL_TRANSITION_STD_VXY  = 10;
     }
 
-    std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " TRANSITION_MODEL_STD_XY: " << TRANSITION_MODEL_STD_XY << " TRANSITION_MODEL_STD_VXY: " << TRANSITION_MODEL_STD_VXY << std::endl;
+    std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " MODEL_TRANSITION_STD_XY: " << MODEL_TRANSITION_STD_XY << " MODEL_TRANSITION_STD_VXY: " << MODEL_TRANSITION_STD_VXY << std::endl;
 
 
     particle_filter();

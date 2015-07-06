@@ -139,3 +139,9 @@ inline bool rect_fits_in_frame(const cv::Rect &r, const cv::Mat &f)
     const cv::Rect frame_region = cv::Rect(0, 0, f.cols, f.rows);
     return rect_fits_in_rect(r, frame_region);
 }
+
+
+inline bool point_in_mat(const int x, const int y, const cv::Mat& mat)
+{
+    return (x >= 0) && (x < mat.cols) && (y >= 0) && (y < mat.rows);
+}

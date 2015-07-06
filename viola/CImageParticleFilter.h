@@ -50,8 +50,7 @@ struct ParticleData
     float vx;
     float vy;
     float vz;
-    int object_x_length_pixels;
-    int object_y_length_pixels;
+    bool valid;
 };
 
 template<typename DEPTH_TYPE>
@@ -73,8 +72,8 @@ public:
         const mrpt::obs::CActionCollection*,
         const mrpt::obs::CSensoryFrame * const observation,
         const bayes::CParticleFilter::TParticleFilterOptions&);
+
     void split_particles();
-    void sort_particles();
 
     void init_particles(const size_t M,
                         const pair<float, float> &x,
@@ -82,9 +81,11 @@ public:
                         const pair<float, float> &z,
                         const pair<float, float> &v_x,
                         const pair<float, float> &v_y,
-                        const pair<float, float> &v_z,
-                        const pair<float, float> &object_semiaxes_lengths
+                        const pair<float, float> &v_z
     );
+
+    void set_object_missing();
+    void set_object_found();
 
 
     void set_color_model(const cv::Mat &model);
@@ -95,23 +96,26 @@ public:
 
     float last_distance;
     int64_t last_time;
-    const vector<Eigen::Vector2f> *shape_model;
-    float factor;
-    float speed_factor;
+
+    int object_times_missing;
+
 #ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;
 #endif
 
-private:
+protected:
+    int64_t last_seen;
+    bool object_found;
+    float transition_model_std_xy;
+    float missing_uncertaincy_multipler;
+
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_valid_roi;
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;
 
-    float object_x_length;
-    float object_y_length;
-
     cv::Mat color_model;
 
+    const vector<Eigen::Vector2f> *shape_model;
     EllipseStash *ellipses;
     ImageRegistration *registration_data;
     boost::math::normal_distribution<float> *depth_normal_distribution;

@@ -1,7 +1,11 @@
 #pragma once
 
-double TRANSITION_MODEL_STD_XY   = 0;
-double TRANSITION_MODEL_STD_VXY  = 0;
+double MODEL_TRANSITION_STD_XY   = 0;
+double MODEL_TRANSITION_STD_VXY  = 0;
+double MODEL_MISSING_UNCERTAINCY_MULTIPLER = 1.2;
+
+int MISSING_TIMES_THRESHOLD = 10;
+
 double NUM_PARTICLES             = 0;
 
 constexpr float LIKEHOOD_FOUND  = 0.3;

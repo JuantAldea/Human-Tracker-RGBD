@@ -94,8 +94,8 @@ struct MultiTracker {
     {
         const size_t N = trackers.size();
         for (size_t i = 0; i < N; i++) {
-            StateEstimation &estimated_new_state = new_states[i];
             CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
+            StateEstimation &estimated_new_state = new_states[i];
             StateEstimation &estimated_state = states[i];
             const float score = estimated_new_state.score_total;
 
@@ -109,8 +109,7 @@ struct MultiTracker {
                 //blended_color_model = estimated_new_state.color_model;
                 //particles.last_distance = estimated_state.average_z;
                 particles.last_distance = estimated_state.z;
-                particles.factor = 1;
-                particles.speed_factor = 1;
+                particles.set_object_found();
             }
 
             if (score > LIKEHOOD_UPDATE) {
@@ -121,14 +120,38 @@ struct MultiTracker {
                                   make_pair(estimated_state.x, estimated_state.radius_x),
                                   make_pair(estimated_state.y, estimated_state.radius_y),
                                   make_pair(float(estimated_state.z), 100.f),
-                                  make_pair(0, 0), make_pair(0, 0), make_pair(0, 0),
-                                  make_pair(MODEL_AXIS_X_METTERS, MODEL_AXIS_Y_METTERS));
-                particles.factor *= 1.2;
-                particles.speed_factor = 0;
-
+                                  make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+                particles.set_object_missing();
             }
         }
     };
+
+    std::vector<StateEstimation> delete_missing()
+    {
+        const size_t N = trackers.size();
+        vector<size_t> trackers_to_delete;
+        for (size_t i = 0; i < N; i++) {
+            CImageParticleFilter<DEPTH_TYPE> &particles = trackers[i];
+            if (particles.object_times_missing > MISSING_TIMES_THRESHOLD){
+                trackers_to_delete.push_back(i);
+            }
+        }
+
+        const size_t N_to_delete = trackers_to_delete.size();
+        std::vector<StateEstimation> deleted_states;
+        for (size_t i = 0; i < N_to_delete; i++) {
+            trackers.erase(trackers.begin() + i);
+            new_states.erase(new_states.begin() + i);
+
+            deleted_states.push_back(states[i]);
+            states.erase(states.begin() + i);
+        }
+
+        trackers.shrink_to_fit();
+        new_states.shrink_to_fit();
+        states.shrink_to_fit();
+        return deleted_states;
+    }
 
     void show(cv::Mat &color_display_frame, const cv::Mat &depth_frame)
     {
@@ -237,50 +260,6 @@ struct MultiTracker {
         cv::line(color_display_frame, cv::Point(0, color_display_frame.rows * 0.5),
                  cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255,
                          0));
-
-        /*
-        {
-            const cv::Point frame_center(color_display_frame.cols * 0.5 , color_display_frame.rows * 0.5);
-            const Eigen::Vector2f center(frame_center.x, frame_center.y);
-            float depth = depth_frame.at<DEPTH_TYPE>(frame_center.y, frame_center.x);
-            Eigen::Vector2i top_corner, bottom_corner;
-            std::tie(top_corner, bottom_corner) = project_model(
-                    center,
-                    depth,
-                    //Eigen::Vector2f(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS),
-                    //Eigen::Vector2f(PERSON_TORSO_X_SEMIAXIS_METTERS, PERSON_TORSO_Y_SEMIAXIS_METTERS),
-                    Eigen::Vector2f(PERSON_HEAD_X_SEMIAXIS_METTERS, PERSON_HEAD_Y_SEMIAXIS_METTERS),
-                    reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-
-            const Eigen::Vector2i diagonal_vector = bottom_corner - top_corner;
-            int radius_x = cvRound(diagonal_vector[0] * 0.5);
-            int radius_y = cvRound(diagonal_vector[1] * 0.5);
-            //cv::circle(color_display_frame, frame_center, radius_x, cv::Scalar(0, 0, 255), 3, 8, 0);
-            cv::ellipse(color_display_frame, frame_center, cv::Size(radius_x, radius_y), 0, 0, 360,
-                        cv::Scalar(0, 0, 255), 3, 8, 0);
-            const Eigen::Vector2i torso_center = project_vector(center, depth, Eigen::Vector3f(0, 0.45, 0),
-                                                 reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
-            cv::ellipse(color_display_frame, cv::Point(torso_center[0], torso_center[1]),
-                        cv::Size(radius_x * 2, radius_y * 2), 0, 0, 360, cv::Scalar(0, 0, 255), 3, 8, 0);
-            {
-                std::ostringstream oss;
-                oss << "DEPTH:" << depth << " ";
-                oss << "AXIS X: " << radius_x << " ";
-                oss << "AXIS Y: " << radius_y << " ";
-
-                int fontFace =  cv::FONT_HERSHEY_PLAIN;
-                double fontScale = 2;
-                int thickness = 2;
-
-                int baseline = 0;
-                cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
-                cv::Point textOrg(0, textSize.height + 10);
-                //cv::Point textOrg(textSize.width, textSize.height);
-                putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0),
-                        thickness, 8);
-            }
-        }
-        */
 
         if(states.size()){
             std::ostringstream oss;

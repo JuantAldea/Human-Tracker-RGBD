@@ -23,7 +23,7 @@ FIND_PACKAGE(PkgConfig QUIET)
 
 SET(USE_KINECT_2 1)
 
-SET(USE_INTEL_TBB 1)
+SET(USE_INTEL_TBB 0)
 IF(${USE_INTEL_TBB})
     SET(TBB_PARTITIONS 8)
     PKG_CHECK_MODULES(TBB tbb)
@@ -56,6 +56,9 @@ LINK_DIRECTORIES(${viola_SOURCE_DIR})
 
 ADD_LIBRARY(ImageParticleFilter STATIC CImageParticleFilter.h)
 SET_TARGET_PROPERTIES(ImageParticleFilter PROPERTIES LINKER_LANGUAGE CXX)
+
+ADD_LIBRARY(model_parameters STATIC model_parameters.h)
+SET_TARGET_PROPERTIES(model_parameters PROPERTIES LINKER_LANGUAGE CXX)
 
 ADD_LIBRARY(EllipseStash STATIC EllipseStash.h)
 SET_TARGET_PROPERTIES(EllipseStash PROPERTIES LINKER_LANGUAGE CXX)
@@ -124,11 +127,13 @@ TARGET_LINK_LIBRARIES(Boost-normal
 
 
 TARGET_LINK_LIBRARIES(model_projections_precalculator
+    model_parameters
     ImageRegistration
     EllipseFunctions
     GeometryHelpers
     MiscHelpers
     BoostSerializers
+
     ${MRPT_LIBS}
     ${OpenCV_LIBS}
     ${Boost_LIBRARIES}
@@ -156,6 +161,7 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     StateEstimation
     EllipseStash
     BoostSerializers
+    model_parameters
 )
 
 #[[
