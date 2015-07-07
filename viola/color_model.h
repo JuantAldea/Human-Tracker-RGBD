@@ -250,7 +250,6 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     
     int64_t t9 = cv::getTickCount();
 
-
     //going back to CPU.
     cv::Mat cpu_gradient_vectors = gradient_vectors;
     cv::Mat cpu_gradient_modulus = gradient_modulus;

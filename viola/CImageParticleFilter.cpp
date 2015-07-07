@@ -358,8 +358,8 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
         const float fitting_score = particles_ellipse_fitting[i];
         const float z_score = 1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
         //printf("%f %f\n", std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001, z_score);
-
-        float score = 1;
+        
+        double score = 1;
         score *= color_score;
         score *= fitting_score;
         score *= z_score;
@@ -367,6 +367,8 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
         if (!object_found){
             score = score > 0.2 ? score : 0;
         }
+
+        score = std::max(WEIGHT_INVALID, score);
 
         particles_valid_roi[i].get().log_w += log(score);
         //printf("%f %f %f = %f (%f)\n", color_score, fitting_score, z_score, score, particles_valid_roi[i].get().log_w);

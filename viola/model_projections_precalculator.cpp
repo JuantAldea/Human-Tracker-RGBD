@@ -48,16 +48,16 @@ int main(int argc, char *argv[])
     std::map<std::string, std::tuple<std::list<int>, Eigen::Vector2i>> ellipses;
     std::map<std::string, std::tuple<std::list<int>, EllipseData>> mask;
     std::cout << "#SIZE: " << X_SEMI_AXIS_METTERS << ' ' << Y_SEMI_AXIS_METTERS << std::endl;
-    char filename[20];
+    char filename[100];
     sprintf(filename, "ellipses_%fx%f.bin", atof(argv[1]), atof(argv[2]));
-    char size[20];
+    char size[100];
 
     //for (int cxx = 0; cxx < 1920; cxx+=1)
     //    for (int cyx = 0; cyx < 1080; cyx+=1)
     std::map<int, std::string> depth_size;
     std::map<std::string, EllipseData> string_ellipse;
 
-    for (int depth = 0; depth < 5000; depth += 1) {
+    for (int depth = 0; depth < 7000; depth += 1) {
         Eigen::Vector2i model_length;
 
         {
@@ -68,6 +68,7 @@ int main(int argc, char *argv[])
             model_length = bottom_corner - top_corner;
 
             sprintf(size, "%d %d", model_length[0], model_length[1]);
+            printf("%d => %s\n", depth, size);
             //std::cout << depth  << " " <<  size << std::endl;
         }
 

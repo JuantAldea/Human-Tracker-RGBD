@@ -99,6 +99,8 @@ public:
 
     int object_times_missing;
 
+    constexpr static double WEIGHT_INVALID = log(0.001);
+
 #ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;

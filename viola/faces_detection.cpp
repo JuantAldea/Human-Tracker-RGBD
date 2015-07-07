@@ -23,35 +23,45 @@ void print_faces(const faces &detected_faces, Mat &frame, float scale_width, flo
 
 faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade, const float scale)
 {
+    const float inv_scale = 1.f / scale;
     cv::Mat frame_gray_aux;
     if(frame.channels() > 1){
+        std::cout << "COLOR CONVERT" << std::endl;
         cv::cvtColor(frame, frame_gray_aux, CV_BGR2GRAY);
     } else {
         frame_gray_aux = frame;
     }
-
+    
     equalizeHist(frame_gray_aux, frame_gray_aux);
 
-    cv::Mat frame_gray(cvRound(frame_gray_aux.rows/scale), cvRound(frame_gray_aux.cols/scale), CV_8UC1);
-    cv::resize(frame_gray_aux, frame_gray, frame_gray.size(), 0, 0, INTER_LINEAR);
-    //cv::Mat frame_gray = frame_gray_aux;
+    cv::Mat frame_gray;
+    if (scale != 1){
+        frame_gray = cv::Mat(cvRound(frame_gray_aux.rows * inv_scale), cvRound(frame_gray_aux.cols * inv_scale), frame_gray_aux.type());
+        cv::resize(frame_gray_aux, frame_gray, frame_gray.size(), 0, 0, INTER_LINEAR);
+    } else {
+         frame_gray = frame_gray_aux;
+    }
+    
     faces detected_faces;
-
     std::vector<Rect> faces;
-    face_cascade.detectMultiScale(frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
+    //face_cascade.detectMultiScale(frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
+    face_cascade.detectMultiScale(frame_gray, faces, 1.2, 5, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30), Size(190, 190));
     for (auto detected_face : faces) {
+        std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
         Mat faceROI = frame_gray(detected_face);
         std::vector<Rect> eyes;
-        eyes_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
+        eyes_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE);
         if (eyes.size() == 2) {
+            std::cout << "FOUND " << detected_face << std::endl;
             cv::Rect face_rescaled = cv::Rect(
-                (detected_face.x - detected_face.width * 0.5) * scale,
-                (detected_face.y - detected_face.height * 0.5) * scale,
+                detected_face.x * scale,
+                detected_face.y * scale,
                 detected_face.width * scale,
-                detected_face.width * scale);
+                detected_face.height * scale);
             detected_faces.push_back(face(face_rescaled, eyes));
             //detected_faces.push_back(face(detected_face, eyes));
         }
+        detected_faces.push_back(face(detected_face, eyes));
     }
 
     return detected_faces;
@@ -60,6 +70,7 @@ faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeCla
 
 faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade, const float scale)
 {
+    const float inv_scale = 1.f / scale;
     cv::ocl::oclMat ocl_frame_gray_aux;
     if(ocl_frame.channels() > 1){
         cv::ocl::cvtColor(ocl_frame, ocl_frame_gray_aux, CV_BGR2GRAY);
@@ -70,28 +81,28 @@ faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifi
     cv::ocl::equalizeHist(ocl_frame_gray_aux, ocl_frame_gray_aux);
     
     //cv::ocl::oclMat ocl_frame_gray;
-    cv::ocl::oclMat ocl_frame_gray(cvRound(ocl_frame_gray_aux.rows/scale), cvRound(ocl_frame_gray_aux.cols/scale), CV_8UC1);
+    cv::ocl::oclMat ocl_frame_gray(cvRound(ocl_frame_gray_aux.rows * inv_scale), cvRound(ocl_frame_gray_aux.cols * inv_scale), ocl_frame_gray_aux.type());
     cv::ocl::resize(ocl_frame_gray_aux, ocl_frame_gray, ocl_frame_gray.size(), 0, 0, INTER_LINEAR);
 
     faces detected_faces;
     
     std::vector<Rect> faces;
-    face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
+    //face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
+    face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.2, 5, 0 | CV_HAAR_SCALE_IMAGE, Size(28, 48), Size(354, 590));
+    std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
     for (auto detected_face : faces) {
         cv::ocl::oclMat faceROI = ocl_frame_gray(detected_face);
         std::vector<Rect> eyes;
-        detected_faces.push_back(face(detected_face, eyes));
-        eyes_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
+        //eyes_cascade.detectMultiScale(faceROI, eyes, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30));
         if (eyes.size() == 2) {
             cv::Rect face_rescaled = cv::Rect(
-                (detected_face.x - detected_face.width * 0.5) * scale,
-                (detected_face.y - detected_face.height * 0.5) * scale,
+                detected_face.x * scale,
+                detected_face.y * scale,
                 detected_face.width * scale,
-                detected_face.width * scale);
-
+                detected_face.height * scale);
             detected_faces.push_back(face(face_rescaled, eyes));
         }
-        
+        detected_faces.push_back(face(detected_face, eyes));
     }
     
     return detected_faces;
