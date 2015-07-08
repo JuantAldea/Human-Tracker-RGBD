@@ -487,15 +487,17 @@ int particle_filter()
         rectangle(color_display_frame, cv::Rect(color_display_frame.cols/2 - 95, color_display_frame.rows/2 - 95, 190, 190), cv::Scalar(255, 0, 0), 1, 0);
 
         if (trackers.states.size()){
-            imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_frame(trackers.states[0].region))));
-            CImage model_image;
-            model_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
-            model_image_window.showImage(model_image);
+            if (rect_fits_in_frame(trackers.states[0].region, color_frame)){
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_frame(trackers.states[0].region))));
+                CImage model_image;
+                model_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                model_image_window.showImage(model_image);
 
-            CImage model_histogram_image;
-            imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].color_model, 10))));
-            model_histogram_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
-            model_histogram_window.showImage(model_histogram_image);
+                CImage model_histogram_image;
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].color_model, 10))));
+                model_histogram_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                model_histogram_window.showImage(model_histogram_image);
+            }
 
             /*
             const cv::Mat mask_weight = ellipses->get_ellipse_mask_weights(trackers.states[0].z);
