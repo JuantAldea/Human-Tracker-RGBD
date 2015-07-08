@@ -6,7 +6,7 @@ CDisplayWindow image2("image2");
 template<typename DEPTH_TYPE>
 bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
                    const vector<Eigen::Vector2f> &shape_model, CImageParticleFilter<DEPTH_TYPE> &particles,
-                   StateEstimation &state, EllipseStash &ellipses)
+                   StateEstimation &state, EllipseStash &ellipses, const ImageRegistration &reg)
 {
     state.x = center.x;
     state.y = center.y;
@@ -33,6 +33,7 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     float non_zero = cv::countNonZero(depth_roi_masked);
     cv::Scalar sum = cv::sum(depth_roi_masked);
     state.average_z = sum[0] / non_zero;
+    
     /*
     {
         //TODO WTF?
@@ -52,11 +53,35 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
 
     //state.color_model = compute_color_model(hsv_roi, mask);
     state.color_model = compute_color_model2(hsv_roi, mask_weights);
-
-    particles.set_color_model(state.color_model);
+    particles.set_head_color_model(state.color_model);
     particles.set_shape_model(shape_model);
     //particles.last_distance = state.average_z;
     particles.last_distance = state.z;
+
+    /*
+    //CHEST
+    state.chest_color_model = cv::Mat();
+
+    const float fx = reg.cameraMatrixColor.at<double>(0, 0);
+    const float fy = reg.cameraMatrixColor.at<double>(1, 1);
+    const float cx = reg.cameraMatrixColor.at<double>(0, 2);
+    const float cy = reg.cameraMatrixColor.at<double>(1, 2);
+
+    const Eigen::Vector3f particle_3D = point_3D_reprojection(state.x, state.y, state.z, reg.lookupX, reg.lookupY);
+    const Eigen::Vector3f particle_3D_upper = particle_3D + Eigen::Vector3f(0, PERSON_HEAD_TORSO_DISTANCE_METTERS, 0);
+    const Eigen::Vector2i particle_2D_upper = point_3D_projection(particle_3D_upper, fx, fy, cx, cy);
+    
+    const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, center_depth);
+
+    const cv::Rect particle_torso_roi = cv::Rect(cvRound(particle_2D_upper[0] - torso_mask_weights.cols * 0.5f),
+                       cvRound(particle_2D_upper[1] - torso_mask_weights.rows * 0.5f),
+                       torso_mask_weights.cols, torso_mask_weights.rows);
+
+
+    const cv::Mat torso_hsv_roi = hsv_frame(particle_torso_roi);
+    state.chest_color_model = compute_color_model2(torso_hsv_roi, torso_mask_weights);
+    */
+    
 
     particles.init_particles(NUM_PARTICLES,
                                   make_pair(state.x, state.radius_x), make_pair(state.y, state.radius_y),
@@ -83,7 +108,7 @@ template <typename DEPTH_TYPE>
 void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
                         const StateEstimation &old_state, StateEstimation &new_state,
                         const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
-                        EllipseStash &ellipses)
+                        EllipseStash &ellipses, const ImageRegistration &reg)
 {
     particles.get_mean(new_state.x, new_state.y, new_state.z, new_state.v_x, new_state.v_y, new_state.v_z);
     Eigen::Vector2i top_corner, bottom_corner;
@@ -110,6 +135,32 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
     cv::Mat hsv_roi = hsv_frame(new_state.region);
     //new_state.color_model = compute_color_model(hsv_roi, mask);
     new_state.color_model = compute_color_model2(hsv_roi, mask_weights);
+
+    //chest model
+    /*
+    const float fx = reg.cameraMatrixColor.at<double>(0, 0);
+    const float fy = reg.cameraMatrixColor.at<double>(1, 1);
+    const float cx = reg.cameraMatrixColor.at<double>(0, 2);
+    const float cy = reg.cameraMatrixColor.at<double>(1, 2);
+
+    const Eigen::Vector3f particle_3D = point_3D_reprojection(new_state.x, new_state.y, new_state.z, reg.lookupX, reg.lookupY);
+    const Eigen::Vector3f particle_3D_upper = particle_3D + Eigen::Vector3f(0, PERSON_HEAD_TORSO_DISTANCE_METTERS, 0);
+    const Eigen::Vector2i particle_2D_upper = point_3D_projection(particle_3D_upper, fx, fy, cx, cy);
+
+    const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, new_state.z);
+
+    const cv::Rect particle_torso_roi = cv::Rect(cvRound(particle_2D_upper[0] - torso_mask_weights.cols * 0.5f),
+                       cvRound(particle_2D_upper[1] - torso_mask_weights.rows * 0.5f),
+                       torso_mask_weights.cols, torso_mask_weights.rows);
+
+    const bool torso_in_frame = rect_fits_in_frame(particle_torso_roi, hsv_frame);
+
+    new_state.chest_color_model = cv::Mat();
+    if(torso_in_frame){
+        const cv::Mat torso_hsv_roi = hsv_frame(particle_torso_roi);
+        new_state.chest_color_model = compute_color_model2(torso_hsv_roi, torso_mask_weights);
+    }
+    */
 }
 
 template <typename DEPTH_TYPE>
@@ -124,7 +175,7 @@ void score_visual_model(StateEstimation &state,
         return;
     }
 
-    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_color_model(),
+    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_head_color_model(),
                                             CV_COMP_BHATTACHARYYA);
     state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y,
                         shape_model, gradient_vectors, cv::Mat(), nullptr);

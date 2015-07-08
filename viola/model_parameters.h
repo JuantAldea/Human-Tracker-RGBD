@@ -15,8 +15,11 @@ constexpr float ELLIPSE_FITTING_ANGLE_STEP = 2;
 
 
 // PERSON MODEL
-constexpr float PERSON_TORSO_X_AXIS_METTERS = 0.40;
-constexpr float PERSON_TORSO_Y_AXIS_METTERS = 0.60;
+
+constexpr float PERSON_HEAD_TORSO_DISTANCE_METTERS = 0.30;
+
+constexpr float PERSON_TORSO_X_AXIS_METTERS = 0.30;
+constexpr float PERSON_TORSO_Y_AXIS_METTERS = 0.20;
 
 constexpr float PERSON_HEAD_X_AXIS_METTERS = 0.15;
 constexpr float PERSON_HEAD_Y_AXIS_METTERS = 0.25;

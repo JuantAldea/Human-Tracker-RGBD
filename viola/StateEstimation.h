@@ -2,19 +2,7 @@
 
 struct StateEstimation
 {
-    float x_head;
-    float y_head;
-    float z_head;
-    float v_x_head;
-    float v_y_head;
-    float v_z_head;
-    int radius_x_head;
-    int radius_y_head;
-    cv::Point center_head;
-    float score_shape_head;
-    float score_total_head;
-    cv::Rect region_head;
-    cv::Mat color_model_head;
+    cv::Mat chest_color_model;
 
     float x;
     float y;

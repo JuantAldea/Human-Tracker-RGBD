@@ -10,10 +10,10 @@ SET(CMAKE_CXX_STANDARD 11)
 
 #SET(CMAKE_CXX_FLAGS_DEBUG "${viola_SOURCE_DIR} -ggdb3 -O0 -pg -std=c++11 -fbuiltin -fno-inline")
 #SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} --fast-math -O3 -flto")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-variable -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin")
 
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
-#SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer")
+SET(CMAKE_EXE_LINKER_FLAGS "-pg")
 
 FIND_PACKAGE(PkgConfig QUIET)
 
@@ -23,7 +23,7 @@ FIND_PACKAGE(PkgConfig QUIET)
 
 SET(USE_KINECT_2 1)
 
-SET(USE_INTEL_TBB 0)
+SET(USE_INTEL_TBB 1)
 IF(${USE_INTEL_TBB})
     SET(TBB_PARTITIONS 8)
     PKG_CHECK_MODULES(TBB tbb)
@@ -164,7 +164,16 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     model_parameters
 )
 
+
+
 #[[
+TARGET_LINK_LIBRARIES(kinect_3d_view
+    KinectCamera
+    ${MRPT_LIBS}
+    ${OpenCV_LIBS}
+    ${OpenCL_LIBRARIES}
+    ${freenect2_LIBRARY}
+)
 TARGET_LINK_LIBRARIES(image_registration_example
     ${OpenCV_LIBS}
     ${OpenCL_LIBRARIES}
@@ -178,13 +187,7 @@ TARGET_LINK_LIBRARIES(calibration_pairs
     ${OpenCL_LIBRARIES}
 )
 
-TARGET_LINK_LIBRARIES(kinect_3d_view
-    KinectCamera
-    ${MRPT_LIBS}
-    ${OpenCV_LIBS}
-    ${OpenCL_LIBRARIES}
-    ${freenect2_LIBRARY}
-)
+
 
 TARGET_LINK_LIBRARIES(Protonect-reg
   ${OpenCV_LIBS}
