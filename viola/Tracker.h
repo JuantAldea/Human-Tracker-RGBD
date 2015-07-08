@@ -53,7 +53,7 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     //state.color_model = compute_color_model(hsv_roi, mask);
     state.color_model = compute_color_model2(hsv_roi, mask_weights);
 
-    particles.set_color_model(state.color_model);
+    particles.set_head_color_model(state.color_model);
     particles.set_shape_model(shape_model);
     //particles.last_distance = state.average_z;
     particles.last_distance = state.z;
@@ -124,7 +124,7 @@ void score_visual_model(StateEstimation &state,
         return;
     }
 
-    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_color_model(),
+    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_head_color_model(),
                                             CV_COMP_BHATTACHARYYA);
     state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y,
                         shape_model, gradient_vectors, cv::Mat(), nullptr);

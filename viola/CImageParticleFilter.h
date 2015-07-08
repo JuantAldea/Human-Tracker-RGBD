@@ -88,8 +88,12 @@ public:
     void set_object_found();
 
 
-    void set_color_model(const cv::Mat &model);
-    const cv::Mat &get_color_model() const;
+    void set_head_color_model(const cv::Mat &model);
+    const cv::Mat &get_head_color_model() const;
+
+    void set_chest_color_model(const cv::Mat &model);
+    const cv::Mat &get_chest_color_model() const;
+
     void set_shape_model(const vector<Eigen::Vector2f> &normal_vectors);
     float get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
     void print_particle_state(void) const;
@@ -115,7 +119,8 @@ protected:
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_valid_roi;
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;
 
-    cv::Mat color_model;
+    cv::Mat head_color_model;
+    cv::Mat chest_color_model;
 
     const vector<Eigen::Vector2f> *shape_model;
     EllipseStash *ellipses;

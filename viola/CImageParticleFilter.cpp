@@ -34,15 +34,27 @@ void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
 }
 
 template<typename DEPTH_TYPE>
-void CImageParticleFilter<DEPTH_TYPE>::set_color_model(const cv::Mat &model)
+void CImageParticleFilter<DEPTH_TYPE>::set_head_color_model(const cv::Mat &model)
 {
-    color_model = model.clone();
+    head_color_model = model.clone();
 }
 
 template<typename DEPTH_TYPE>
-const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_color_model() const
+const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_head_color_model() const
 {
-    return color_model;
+    return head_color_model;
+}
+
+template<typename DEPTH_TYPE>
+void CImageParticleFilter<DEPTH_TYPE>::set_chest_color_model(const cv::Mat &model)
+{
+    chest_color_model = model.clone();
+}
+
+template<typename DEPTH_TYPE>
+const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_chest_color_model() const
+{
+    return chest_color_model;
 }
 
 template<typename DEPTH_TYPE>
@@ -353,16 +365,16 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
 */
     //third, weight them
     auto weight_valid_particle = [this, &particles_color_model, &particles_ellipse_fitting] (const size_t i){
-        const float distance_hist = cv::compareHist(color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
-        const float color_score  = (1 - distance_hist);
-        const float fitting_score = particles_ellipse_fitting[i];
-        const float z_score = 1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
+        const float head_hist_distance = cv::compareHist(head_color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+        const float head_color_score  = (1 - head_hist_distance);
+        const float head_fitting_score = particles_ellipse_fitting[i];
+        const float head_z_score = 1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
         //printf("%f %f\n", std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001, z_score);
         
         double score = 1;
-        score *= color_score;
-        score *= fitting_score;
-        score *= z_score;
+        score *= head_color_score;
+        score *= head_fitting_score;
+        score *= head_z_score;
 
         if (!object_found){
             score = score > 0.2 ? score : 0;

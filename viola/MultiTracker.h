@@ -105,7 +105,7 @@ struct MultiTracker {
                 //estimated_new_state.color_model = blended_color_model;
                 estimated_state = estimated_new_state;
                 estimated_state.color_model = blended_color_model;
-                particles.set_color_model(estimated_state.color_model);
+                particles.set_head_color_model(estimated_state.color_model);
                 //blended_color_model = estimated_new_state.color_model;
                 //particles.last_distance = estimated_state.average_z;
                 particles.last_distance = estimated_state.z;
@@ -113,6 +113,7 @@ struct MultiTracker {
             }
 
             if (score > LIKEHOOD_UPDATE) {
+
             }
 
             if (score < LIKEHOOD_FOUND) {
