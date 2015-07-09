@@ -192,7 +192,7 @@ int particle_filter()
     reg.init(calib_path, serial);
 
     //load or precompute ellipses projections
-    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.400000x0.600000.bin"});
+    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.300000x0.200000.bin"});
 
     pipeline = new libfreenect2::OpenCLPacketPipeline();
 
@@ -415,7 +415,7 @@ int particle_filter()
 
         // Tracking
         std::vector<cv::Vec3f> circles;
-        
+
         uint64_t viola_t0 = cv::getTickCount();
         
         cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
