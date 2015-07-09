@@ -7,14 +7,15 @@
 
 template <typename DEPTH_TYPE>
 struct MultiTracker {
-    ImageRegistration reg;
-    boost::math::normal_distribution<float> depth_distribution;
+    const ImageRegistration *reg;
+    const boost::math::normal_distribution<float> depth_distribution;
+    
     std::vector<CImageParticleFilter<DEPTH_TYPE>> trackers;
     std::vector<StateEstimation> states;
     std::vector<StateEstimation> new_states;
     std::vector<Eigen::Vector2f> ellipse_normals;
 
-    MultiTracker(const ImageRegistration &ir) :
+    MultiTracker(const ImageRegistration *ir) :
         reg(ir),
         depth_distribution(0, DEPTH_SIGMA),
         ellipse_normals(calculate_ellipse_normals(MODEL_SEMIAXIS_X_METTERS, MODEL_SEMIAXIS_Y_METTERS,
@@ -64,11 +65,25 @@ struct MultiTracker {
             return;
         }
 
-        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, &reg, &depth_distribution));
+        Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
+                                                                reg->cameraMatrixColor, reg->lookupX, reg->lookupY);
+
+        const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
+        const cv::Rect torso_roi = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
+                                           cvRound(torso_center[1] - ellipse_axes.height * 0.5f),
+                                               ellipse_axes.width, ellipse_axes.height);
+
+        const bool torso_in_frame = rect_fits_in_frame(torso_roi, hsv_frame);
+        
+        if (!torso_in_frame){
+            return;
+        }
+
+        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, reg, &depth_distribution));
         states.push_back(StateEstimation());
         new_states.push_back(StateEstimation());
-        init_tracking<DEPTH_TYPE>(center, center_depth, hsv_frame, depth_frame, ellipse_normals,
-                                  trackers.back(), states.back(), ellipses);
+        init_tracking(center, center_depth, hsv_frame, depth_frame, ellipse_normals,
+                                  trackers.back(), states.back(), ellipses, *reg);
     };
 
     void tracking(const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
@@ -83,9 +98,11 @@ struct MultiTracker {
             const StateEstimation &estimated_state = states[i];
             static CParticleFilter::TParticleFilterStats stats;
             do_tracking(PF, particles, observation, stats);
-            build_state_model<DEPTH_TYPE>(particles, estimated_state, estimated_new_state, hsv_frame,
-                                           depth_frame, ellipses);
-            score_visual_model(estimated_new_state, particles, gradient_vectors, ellipse_normals);
+            build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
+                depth_frame, ellipses);
+            
+            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals);
+            
             particles.last_time = cv::getTickCount();
         }
     };
@@ -100,14 +117,9 @@ struct MultiTracker {
             const float score = estimated_new_state.score_total;
 
             if (score > LIKEHOOD_FOUND) {
-                cv::Mat blended_color_model(estimated_state.color_model.rows, estimated_state.color_model.cols, estimated_state.color_model.type());
-                cv::addWeighted(estimated_state.color_model, 1 - score, estimated_new_state.color_model, score, 0, blended_color_model);
-                //estimated_new_state.color_model = blended_color_model;
-                estimated_state = estimated_new_state;
-                estimated_state.color_model = blended_color_model;
+                estimated_state.blend(estimated_new_state);
                 particles.set_head_color_model(estimated_state.color_model);
-                //blended_color_model = estimated_new_state.color_model;
-                //particles.last_distance = estimated_state.average_z;
+                particles.set_torso_color_model(estimated_state.torso_color_model);
                 particles.last_distance = estimated_state.z;
                 particles.set_object_found();
             }
@@ -154,7 +166,7 @@ struct MultiTracker {
         return deleted_states;
     }
 
-    void show(cv::Mat &color_display_frame, const cv::Mat &depth_frame)
+    void show(cv::Mat &color_display_frame, const cv::Mat &depth_frame) const
     {
         const size_t N = trackers.size();
         for (size_t i = 0; i < N; i++) {
@@ -215,9 +227,7 @@ struct MultiTracker {
             }
             */
 
-            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20,
-                       cv::Scalar(255, 0, 0), 5, 1, 0);
-            cv::circle(color_display_frame, estimated_state.center, 150, cv::Scalar(0, 0, 255), 3, 8, 0);
+            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             const size_t N_PARTICLES = particles.m_particles.size();
 
             {

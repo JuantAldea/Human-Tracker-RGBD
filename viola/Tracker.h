@@ -3,10 +3,11 @@
 #include "StateEstimation.h"
 #include "EllipseStash.h"
 CDisplayWindow image2("image2");
+
 template<typename DEPTH_TYPE>
-bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
+bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
                    const vector<Eigen::Vector2f> &shape_model, CImageParticleFilter<DEPTH_TYPE> &particles,
-                   StateEstimation &state, EllipseStash &ellipses)
+                   StateEstimation &state, EllipseStash &ellipses, const ImageRegistration &reg)
 {
     state.x = center.x;
     state.y = center.y;
@@ -18,6 +19,7 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     state.score_color = 1;
     state.score_shape = 1;
     state.center = center;
+    
     const cv::Mat mask = ellipses.get_ellipse_mask_1D(BodyPart::HEAD, center_depth);
     const cv::Mat mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::HEAD, center_depth);
 
@@ -50,7 +52,6 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     }
     */
 
-    //state.color_model = compute_color_model(hsv_roi, mask);
     state.color_model = compute_color_model2(hsv_roi, mask_weights);
 
     particles.set_head_color_model(state.color_model);
@@ -58,13 +59,22 @@ bool init_tracking(const cv::Point &center, DEPTH_TYPE center_depth, const cv::M
     //particles.last_distance = state.average_z;
     particles.last_distance = state.z;
 
-    particles.init_particles(NUM_PARTICLES,
-                                  make_pair(state.x, state.radius_x), make_pair(state.y, state.radius_y),
-                                  make_pair(float(state.z), 100.f),
-                                  make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+    //CHEST
+    const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, center_depth);
+    Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
+                                                                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
-    std::cout << "MEAN detected circle: " << state.x << ' ' << state.y << ' ' << state.z << std::endl;
-
+    const cv::Rect torso_rect = cv::Rect(cvRound(torso_center[0] - torso_mask_weights.cols * 0.5f),
+                                         cvRound(torso_center[1] - torso_mask_weights.rows * 0.5f),
+                                         torso_mask_weights.cols, torso_mask_weights.rows);
+    
+    const cv::Mat torso_roi = hsv_frame(torso_rect);
+    state.torso_color_model = compute_color_model2(torso_roi, torso_mask_weights);
+    particles.set_torso_color_model(state.torso_color_model);
+    
+    particles.init_particles(NUM_PARTICLES, make_pair(state.x, state.radius_x), make_pair(state.y, state.radius_y),
+                            make_pair(float(state.z), 100.f),
+                            make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
     return true;
 };
 
@@ -75,8 +85,6 @@ void do_tracking(CParticleFilter &PF, CImageParticleFilter<DEPTH_TYPE> &particle
                  const CSensoryFrame &observation, CParticleFilter::TParticleFilterStats &stats)
 {
     PF.executeOn(particles, NULL, &observation, &stats);
-    //cout << "ESS_beforeResample " << stats.ESS_beforeResample << " weightsVariance_beforeResample " << stats.weightsVariance_beforeResample << std::endl;
-    //cout << "Particle filter ESS: " << particles.ESS() << endl;
 }
 
 template <typename DEPTH_TYPE>
@@ -105,28 +113,32 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
         return;
     }
 
-    const cv::Mat mask = ellipses.get_ellipse_mask_1D(BodyPart::HEAD, z);
     const cv::Mat mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::HEAD, z);
     cv::Mat hsv_roi = hsv_frame(new_state.region);
-    //new_state.color_model = compute_color_model(hsv_roi, mask);
     new_state.color_model = compute_color_model2(hsv_roi, mask_weights);
+
+
 }
 
-template <typename DEPTH_TYPE>
-void score_visual_model(StateEstimation &state,
-                        const CImageParticleFilter<DEPTH_TYPE> &particles, const cv::Mat &gradient_vectors,
+void score_visual_model(const StateEstimation &state, StateEstimation &new_state, const cv::Mat &gradient_vectors,
                         const std::vector<Eigen::Vector2f> &shape_model)
 {
-    if (state.color_model.empty()) {
-        state.score_total = -1;
-        state.score_color = -1;
-        state.score_shape = -1;
+    if (new_state.color_model.empty()) {
+        new_state.score_total = -1;
+        new_state.score_color = -1;
+        new_state.score_shape = -1;
         return;
     }
 
-    state.score_color = 1 - cv::compareHist(state.color_model, particles.get_head_color_model(),
+    new_state.score_color = 1 - cv::compareHist(new_state.color_model, state.color_model,
                                             CV_COMP_BHATTACHARYYA);
-    state.score_shape = ellipse_contour_test(state.center, state.radius_x, state.radius_y,
+    new_state.score_shape = ellipse_contour_test(new_state.center, new_state.radius_x, new_state.radius_y,
                         shape_model, gradient_vectors, cv::Mat(), nullptr);
-    state.score_total = state.score_color * state.score_shape;
+    /*
+    new_state.torso_color_score = 1 - cv::compareHist(new_state.torso_color_model, state.torso_color_model,
+                                            CV_COMP_BHATTACHARYYA);
+    */
+    
+    //TODO UPDATE WITH DEPTH AND TORSO?
+    new_state.score_total = new_state.score_color * new_state.score_shape;
 }
