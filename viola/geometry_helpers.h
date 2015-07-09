@@ -303,3 +303,23 @@ Vector2i project_vector(const Vector2f &origin, const float depth, const Vector3
     return projected_point;
 }
 
+Vector2i translate_2D_vector_in_3D_space(const int x, const int y, const float depth, const Vector3f &translation,
+    const float fx, const float fy, const float cx, const float cy, const cv::Mat &lookupX, const cv::Mat &lookupY)
+{    
+    const Eigen::Vector3f point_3D = point_3D_reprojection(x, y, depth, lookupX, lookupY);
+    const Eigen::Vector3f point_3D_translated = point_3D + translation;
+    const Eigen::Vector2i point_2D_translated = point_3D_projection(point_3D_translated, fx, fy, cx, cy);
+    return point_2D_translated;
+}
+
+Vector2i translate_2D_vector_in_3D_space(const int x, const int y, const float depth, const Vector3f &translation,
+    const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY)
+{
+    const float fx = cameraMatrix.at<double>(0, 0);
+    const float fy = cameraMatrix.at<double>(1, 1);
+    const float cx = cameraMatrix.at<double>(0, 2);
+    const float cy = cameraMatrix.at<double>(1, 2);
+
+    return translate_2D_vector_in_3D_space(x, y, depth, translation, fx, fy, cx, cy, lookupX, lookupY);
+}
+
