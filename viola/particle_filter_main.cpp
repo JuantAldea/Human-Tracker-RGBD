@@ -329,8 +329,7 @@ int particle_filter()
         cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
         
-        uint64_t read_kinect_t1 = cv::getTickCount();
-        float read_kinect_t = (read_kinect_t1 - read_kinect_t0) / double(cv::getTickFrequency());
+        float read_kinect_t = (cv::getTickCount() - read_kinect_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_READ_KINECT " << read_kinect_t << std::endl;
 
         //Registration
@@ -340,8 +339,7 @@ int particle_filter()
         reg.register_images(color_mat, depth_mat, registered_depth);
         cv::flip(color_mat, color_mat, 1);
 
-        uint64_t registration_t1 = cv::getTickCount();
-        float registration_t = (registration_t1 - registration_t0) / double(cv::getTickFrequency());
+        float registration_t = (cv::getTickCount() - registration_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
 
         // Observation building
@@ -367,9 +365,7 @@ int particle_filter()
         cv::Mat gray_frame;
         cvtColor(color_frame, gray_frame, CV_RGB2GRAY);
 #endif
-        uint64_t color_conversion_t1 = cv::getTickCount();
-
-        float color_conversion_t = (color_conversion_t1 - color_conversion_t0) / double(cv::getTickFrequency());
+        float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
              
         //cv::Mat hsv_frame;
@@ -380,8 +376,7 @@ int particle_filter()
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(gray_frame);
         
-        uint64_t sobel_t1 = cv::getTickCount();
-        float sobel_t = (sobel_t1 - sobel_t0) / double(cv::getTickFrequency());
+        float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
 
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
@@ -429,9 +424,8 @@ int particle_filter()
         cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
         std::vector<viola_faces::face> caras = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
         //std::vector<viola_faces ::face> caras = viola_faces::detect_faces(gray_frame, face_cascade, eyes_cascade, 1);
-        
-        uint64_t viola_t1 = cv::getTickCount();
-        float viola_t = (viola_t1 - viola_t0) / double(cv::getTickFrequency());
+
+        float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_VIOLA " << viola_t << std::endl;
         
         for (auto &cara : caras){
@@ -469,9 +463,8 @@ int particle_filter()
         trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
         trackers.update(ellipses);
         trackers.delete_missing();
-        
-        uint64_t tracking_t1 = cv::getTickCount();
-        float tracking_t = (tracking_t1 - tracking_t0) / double(cv::getTickFrequency());
+
+        float tracking_t = (cv::getTickCount() - tracking_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_TRACKING " << tracking_t << std::endl;
 
 #define VISUALIZATION
@@ -574,8 +567,7 @@ int particle_filter()
         win3D.unlockAccess3DScene();
         win3D.repaint();
 #endif
-        uint64_t visualization_t1 = cv::getTickCount();
-        float visualization_t = (visualization_t1 - visualization_t0) / double(cv::getTickFrequency());
+        float visualization_t = (cv::getTickCount() - visualization_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_VISUALIZATION " << visualization_t << std::endl;        
 #endif
         counter++;
