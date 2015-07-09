@@ -305,7 +305,7 @@ int particle_filter()
     CParticleFilter PF;
     PF.m_options = PF_options;
 
-    MultiTracker<DEPTH_TYPE> trackers(reg);
+    MultiTracker<DEPTH_TYPE> trackers(&reg);
 
     time_t start, end;
     int counter = 0;
@@ -465,15 +465,32 @@ int particle_filter()
 #define VISUALIZATION
 #ifdef VISUALIZATION
         uint64_t visualization_t0 = cv::getTickCount();
+        
         viola_faces::print_faces(caras, color_display_frame, 1, 1);
+        
+        for (auto circle : circles){
+            cv::Point center(cvRound(circle[0]), cvRound(circle[1]));
+            const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x));
+            if (center_depth == 0){
+                continue;
+            }
+            Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR, reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+            const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
+            const cv::Rect torso_roi = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
+                                                   cvRound(torso_center[1] - ellipse_axes.height * 0.5f),
+                                                   ellipse_axes.width, ellipse_axes.height);
+
+            const bool valid = rect_fits_in_frame(torso_roi, hsv_frame);
+            const cv::Scalar color = valid ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 0, 255);
+            cv::ellipse(color_display_frame, cv::Point(torso_center[0], torso_center[1]), cv::Size(ellipse_axes.width * 0.5, ellipse_axes.height * 0.5), 0, 0, 360, color, -3, 8, 0);
+
+        }
+
         trackers.show(color_display_frame, depth_frame);
         
         std::vector<std::unique_ptr<IplImage>> imp_image_pointers;
         
-        rectangle(color_display_frame, cv::Rect(color_display_frame.cols/2 - 40, color_display_frame.rows/2 - 40, 80, 80), cv::Scalar(255, 0, 0), 1, 0);
-        rectangle(color_display_frame, cv::Rect(color_display_frame.cols/2 - 15, color_display_frame.rows/2 - 15, 30, 30), cv::Scalar(255, 0, 0), 1, 0);
-        rectangle(color_display_frame, cv::Rect(color_display_frame.cols/2 - 95, color_display_frame.rows/2 - 95, 190, 190), cv::Scalar(255, 0, 0), 1, 0);
-
         if (trackers.states.size()){
             if (rect_fits_in_frame(trackers.states[0].region, color_frame)){
                 imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_frame(trackers.states[0].region))));
