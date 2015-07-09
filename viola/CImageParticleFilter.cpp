@@ -4,7 +4,7 @@
 #include <limits>
 
 template<typename DEPTH_TYPE>
-CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, ImageRegistration *reg, normal_dist *normal_distribution) :
+CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const normal_distribution) :
     ellipses(ellipses),
     registration(reg),
     depth_normal_distribution(normal_distribution)
@@ -46,15 +46,15 @@ const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_head_color_model() const
 }
 
 template<typename DEPTH_TYPE>
-void CImageParticleFilter<DEPTH_TYPE>::set_chest_color_model(const cv::Mat &model)
+void CImageParticleFilter<DEPTH_TYPE>::set_torso_color_model(const cv::Mat &model)
 {
-    chest_color_model = model.clone();
+    torso_color_model = model.clone();
 }
 
 template<typename DEPTH_TYPE>
-const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_chest_color_model() const
+const cv::Mat & CImageParticleFilter<DEPTH_TYPE>::get_torso_color_model() const
 {
-    return chest_color_model;
+    return torso_color_model;
 }
 
 template<typename DEPTH_TYPE>

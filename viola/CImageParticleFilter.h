@@ -61,7 +61,7 @@ class CImageParticleFilter :
 {
 
 public:
-    CImageParticleFilter(EllipseStash *ellipses, ImageRegistration *reg, normal_dist *depth_distribution);
+    CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const depth_distribution);
     using ParticleType = typename decltype(m_particles)::value_type;
 
     void update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation);
@@ -91,8 +91,8 @@ public:
     void set_head_color_model(const cv::Mat &model);
     const cv::Mat &get_head_color_model() const;
 
-    void set_chest_color_model(const cv::Mat &model);
-    const cv::Mat &get_chest_color_model() const;
+    void set_torso_color_model(const cv::Mat &model);
+    const cv::Mat &get_torso_color_model() const;
 
     void set_shape_model(const vector<Eigen::Vector2f> &normal_vectors);
     float get_mean(float &x, float &y, float &z, float &vx, float &vy, float &vz) const;
@@ -120,12 +120,12 @@ protected:
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;
 
     cv::Mat head_color_model;
-    cv::Mat chest_color_model;
+    cv::Mat torso_color_model;
 
     const vector<Eigen::Vector2f> *shape_model;
     EllipseStash *ellipses;
-    ImageRegistration *registration;
-    boost::math::normal_distribution<float> *depth_normal_distribution;
+    const ImageRegistration *registration;
+    const boost::math::normal_distribution<float> *depth_normal_distribution;
 };
 
 
