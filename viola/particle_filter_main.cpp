@@ -415,15 +415,11 @@ int particle_filter()
 
         // Tracking
         std::vector<cv::Vec3f> circles;
-//#define CIRCLES
-#ifdef CIRCLES
-        circles = viola_faces::detect_circles(color_frame);
-#else
+        
         uint64_t viola_t0 = cv::getTickCount();
         
         cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
         std::vector<viola_faces::face> caras = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
-        //std::vector<viola_faces ::face> caras = viola_faces::detect_faces(gray_frame, face_cascade, eyes_cascade, 1);
 
         float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_VIOLA " << viola_t << std::endl;
@@ -431,7 +427,6 @@ int particle_filter()
         for (auto &cara : caras){
             circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
         }
-#endif
         if (circles.size() != 0) {
             int circle_max = 0;
             double radius_max = circles[0][2];
