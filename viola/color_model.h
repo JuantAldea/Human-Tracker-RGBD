@@ -271,9 +271,8 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
 
     const double t10_0 = (t10 - t0) * inv_freq;
     
-    std::cout << "TIMES_SOBEL " << t10_0 << ',' << t1_0 << ',' << t2_1 << ',' << t3_2 << ',' << t4_3 << ',' << t5_4 << ',' << t6_5 << ',' << t7_6 << ',' << t8_7 << ',' << t9_8 << ',' << t10_9 << std::endl;
-
-    
+    //std::cout << "TIMES_SOBEL " << t10_0 << ',' << t1_0 << ',' << t2_1 << ',' << t3_2 << ',' << t4_3 << ',' << t5_4 << ',' << t6_5 << ',' << t7_6 << ',' << t8_7 << ',' << t9_8 << ',' << t10_9 << std::endl;
+ 
     return std::make_tuple(cpu_gradient_vectors, cpu_gradient_modulus, cpu_gradient_modulus_scaled);
 }
 

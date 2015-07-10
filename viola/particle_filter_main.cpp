@@ -330,7 +330,7 @@ int particle_filter()
         //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
         
         float read_kinect_t = (cv::getTickCount() - read_kinect_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_READ_KINECT " << read_kinect_t << std::endl;
+        //std::cout << "TIMES_READ_KINECT " << read_kinect_t << std::endl;
 
         //Registration
         uint64_t registration_t0 = cv::getTickCount();
@@ -340,7 +340,7 @@ int particle_filter()
         cv::flip(color_mat, color_mat, 1);
 
         float registration_t = (cv::getTickCount() - registration_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
+        //std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
 
         // Observation building
         color_frame = color_mat;
@@ -366,7 +366,7 @@ int particle_filter()
         cvtColor(color_frame, gray_frame, CV_RGB2GRAY);
 #endif
         float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
+        //std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
              
         //cv::Mat hsv_frame;
         //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
@@ -422,7 +422,7 @@ int particle_filter()
         std::vector<viola_faces::face> caras = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
 
         float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_VIOLA " << viola_t << std::endl;
+        //std::cout << "TIMES_VIOLA " << viola_t << std::endl;
         
         for (auto &cara : caras){
             circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
@@ -455,12 +455,12 @@ int particle_filter()
         }
 
         uint64_t tracking_t0 = cv::getTickCount();
-        trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses);
+        trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses, reg);
         trackers.update(ellipses);
         trackers.delete_missing();
 
         float tracking_t = (cv::getTickCount() - tracking_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_TRACKING " << tracking_t << std::endl;
+        //std::cout << "TIMES_TRACKING " << tracking_t << std::endl;
 
 #define VISUALIZATION
 #ifdef VISUALIZATION
@@ -580,7 +580,7 @@ int particle_filter()
         win3D.repaint();
 #endif
         float visualization_t = (cv::getTickCount() - visualization_t0) / double(cv::getTickFrequency());
-        std::cout << "TIMES_VISUALIZATION " << visualization_t << std::endl;        
+        //std::cout << "TIMES_VISUALIZATION " << visualization_t << std::endl;        
 #endif
         counter++;
         if (counter > 30){
@@ -595,7 +595,7 @@ int particle_filter()
         }
 
         listener->release(frames_kinect2);
-        cout << "TIME_TOTAL " << read_kinect_t + color_conversion_t + sobel_t + viola_t + tracking_t << std::endl;
+        //cout << "TIME_TOTAL " << read_kinect_t + color_conversion_t + sobel_t + viola_t + tracking_t << std::endl;
     }
 
 
@@ -629,6 +629,7 @@ int main(int argc, char *argv[])
 
     std::cout << "NUM_PARTICLES: " << NUM_PARTICLES << " MODEL_TRANSITION_STD_XY: " << MODEL_TRANSITION_STD_XY << " MODEL_TRANSITION_STD_VXY: " << MODEL_TRANSITION_STD_VXY << std::endl;
 
+    cv::redirectError(handle_OpenCV_error);
 
     particle_filter();
 

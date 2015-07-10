@@ -61,6 +61,7 @@ class CImageParticleFilter :
 {
 
 public:
+    static double WEIGHT_INVALID;
     CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const depth_distribution);
     using ParticleType = typename decltype(m_particles)::value_type;
 
@@ -103,7 +104,7 @@ public:
 
     int object_times_missing;
 
-    constexpr static double WEIGHT_INVALID = log(0.001);
+    
 
 #ifdef DEBUG
     CDisplayWindow particle_window;

@@ -16,6 +16,9 @@ CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, c
 }
 
 template<typename DEPTH_TYPE>
+double CImageParticleFilter<DEPTH_TYPE>::WEIGHT_INVALID = 0.0001f;
+
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::print_particle_state(void) const
 {
     size_t N = m_particles.size();
@@ -117,7 +120,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
                                                    cvRound(m_particles[i].d->y - ellipse_axes.height * 0.5f),
                                                    ellipse_axes.width, ellipse_axes.height);
 
-             m_particles[i].d->valid = rect_fits_in_frame(particle_roi, depth_mat);
+            m_particles[i].d->valid = rect_fits_in_frame(particle_roi, depth_mat);
         }
     };
 
@@ -157,8 +160,8 @@ cv::Mat compute_valid_particle_color_model(const ParticleData &particle, const c
     const cv::Mat &mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::HEAD, particle.z);
 
     const cv::Rect particle_roi = cv::Rect(
-        particle.x - mask.cols * 0.5,
-        particle.y - mask.rows * 0.5,
+        cvRound(particle.x - mask.cols * 0.5),
+        cvRound(particle.y - mask.rows * 0.5),
         mask.cols, mask.rows);
 
     const cv::Mat particle_roi_img = frame_hsv(particle_roi);
@@ -196,28 +199,11 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     const cv::Mat gradient_magnitude = cv::Mat(image_gradient_magnitude->image.getAs<IplImage>());
 
     split_particles();
+    
     assert(particles_invalid_roi.size() + particles_valid_roi.size() == m_particles.size());
 
     if (!particles_valid_roi.size()){
         throw;
-    }
-
-    size_t N = particles_valid_roi.size();
-
-    {
-        for (size_t i = 0; i < N; i++) {
-            const ParticleData &particle = *(particles_valid_roi[i].get().d);
-            
-            Eigen::Vector2i torso_particle = translate_2D_vector_in_3D_space(particle.x, particle.y, particle.z, HEAD_TO_TORSE_CENTER_VECTOR,
-                                                                registration->cameraMatrixColor, registration->lookupX, registration->lookupY);
-            
-            const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, particle.z);
-            const cv::Rect particle_roi = cv::Rect(cvRound(torso_particle[0] - ellipse_axes.width * 0.5f),
-                                                   cvRound(torso_particle[1] - ellipse_axes.height * 0.5f),
-                                                   ellipse_axes.width, ellipse_axes.height);
-
-            const bool valid = rect_fits_in_frame(particle_roi, frame_hsv);
-        }
     }
 
     /*
@@ -226,18 +212,19 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         particles_3D.push_back(point_3D_reprojection(particle.d->x, particle.d->y, particle.d->z, registration->lookupX, registration->lookupY))
     }
     */
-
-    vector<cv::Mat> particles_color_model(N);
+    
+    const size_t N = particles_valid_roi.size();
+    
+    vector<cv::Mat> particles_head_color_model(N);
     vector<float> particles_ellipse_fitting(N);
 
-    auto compute_particle_color_model = [&](const ParticleData &particle){
-        const cv::Mat &mask = ellipses->get_ellipse_mask_1D(BodyPart::HEAD, particle.z);
-        const cv::Mat &mask_weights = ellipses->get_ellipse_mask_weights(BodyPart::HEAD, particle.z);
+    auto compute_particle_color_model = [&](const float x, const float y, const float z){
+        const cv::Mat &mask_weights = ellipses->get_ellipse_mask_weights(BodyPart::HEAD, cvRound(z));
 
         const cv::Rect particle_roi = cv::Rect(
-            particle.x - mask.cols * 0.5,
-            particle.y - mask.rows * 0.5,
-            mask.cols, mask.rows);
+            cvRound(x - mask_weights.cols * 0.5),
+            cvRound(y - mask_weights.rows * 0.5),
+            mask_weights.cols, mask_weights.rows);
 
         const cv::Mat particle_roi_img = frame_hsv(particle_roi);
         const cv::Mat color_model = compute_color_model2(particle_roi_img, mask_weights);
@@ -252,10 +239,10 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
         return color_model;
     };
 
-    auto compute_particle_ellipse_fitting = [&](const ParticleData &particle){
-        const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, particle.z);
+    auto compute_particle_ellipse_fitting = [&](const float x, const float y, const float z){
+        const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, cvRound(z));
         //TODO CHANGE THIS TO DO THE TEST OVER A ROI
-        const float fitting = ellipse_contour_test(cv::Point(particle.x, particle.y),
+        const float fitting = ellipse_contour_test(cv::Point(x, y),
                                              ellipse_axes.width * 0.5,
                                              ellipse_axes.height * 0.5,
                                              *shape_model, gradient_vectors,
@@ -270,25 +257,25 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
 
 #ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
-        [this, &frame_hsv, &particles_color_model, &compute_valid_particle_color_model,
+        [this, &frame_hsv, &particles_head_color_model, &compute_particle_color_model, &compute_particle_ellipse_fitting,
             &gradient_vectors, &gradient_magnitude, &particles_ellipse_fitting](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 const ParticleData &particle = *(particles_valid_roi[i].get().d);
                 /*
-                particles_color_model[i] = compute_particle_color_model(particle, frame_hsv);
+                particles_head_color_model[i] = compute_particle_color_model(particle, frame_hsv);
                 particles_ellipse_fitting[i] = compute_valid_particle_ellipse_fitting(particle, gradient_vectors,
                     gradient_magnitude, *shape_model);
                 */
-                particles_color_model[i] = compute_particle_color_model(particle);
-                particles_ellipse_fitting[i] = compute_particle_ellipse_fitting(particle);
+                particles_head_color_model[i] = compute_particle_color_model(particle.x, particle.y, particle.z);
+                particles_ellipse_fitting[i] = compute_particle_ellipse_fitting(particle.x, particle.y, particle.z);
             }
         }
     );
 #else
     for (size_t i = 0; i < N; i++) {
         const ParticleData &particle = *(particles_valid_roi[i].get().d);
-        particles_color_model[i] = compute_particle_color_model(particle);
-        particles_ellipse_fitting[i] = compute_particle_ellipse_fitting(particle);
+        particles_head_color_model[i] = compute_particle_color_model(particle.x, particle.y, particle.z);
+        particles_ellipse_fitting[i] = compute_particle_ellipse_fitting(particle.x, particle.y, particle.z);
     }
 #endif
 
@@ -353,18 +340,91 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
     }
 #endif
 */
+
+
+    //CHEST
+    std::vector<Eigen::Vector3i> torso_particles(N);
+    std::vector<bool> torso_in_frame(N);
+    std::vector<cv::Mat> particles_torso_color_model(N);
+    
+    auto calculate_torso_particles = [&](const size_t i) {
+        const ParticleData &particle = *(particles_valid_roi[i].get().d);
+        const Eigen::Vector2i torso_particle = translate_2D_vector_in_3D_space(particle.x, particle.y, particle.z, HEAD_TO_TORSE_CENTER_VECTOR,
+                                                            registration->cameraMatrixColor, registration->lookupX, registration->lookupY);
+        
+        const Eigen::Vector3i torso_particle_2D_D = Vector3i(torso_particle[0], torso_particle[1], particle.z);
+        
+        const cv::Size ellipse_axes = ellipses->get_ellipse_size(BodyPart::HEAD, particle.z);
+        const cv::Rect torso_roi = cv::Rect(cvRound(torso_particle[0] - ellipse_axes.width * 0.5f),
+                                               cvRound(torso_particle[1] - ellipse_axes.height * 0.5f),
+                                               ellipse_axes.width, ellipse_axes.height);
+
+        const bool valid = rect_fits_in_frame(torso_roi, frame_hsv);
+        
+        torso_particles[i] = torso_particle_2D_D;
+        torso_in_frame[i] = valid;
+    };
+
+#ifdef USE_INTEL_TBB
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+        [this, &calculate_torso_particles](const tbb::blocked_range<size_t> &r) {
+            for (size_t i = r.begin(); i != r.end(); i++) {
+                calculate_torso_particles(i);
+            }
+        }
+    );
+#else
+    for (size_t i = 0; i < N; i++) {
+        calculate_torso_particles(i);
+    }
+#endif
+
+int n_particles_with_chest = 0;
+
+    for (size_t i = 0; i < N; i++) {
+        n_particles_with_chest += torso_in_frame[i];
+    }
+
+bool enough_chests_visible = (n_particles_with_chest / float(N)) >= 0.9;
+    if (enough_chests_visible){
+#ifdef USE_INTEL_TBB
+        tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
+            [this, &frame_hsv, &torso_particles, &torso_in_frame, &particles_torso_color_model, &compute_particle_color_model](const tbb::blocked_range<size_t> &r) {
+                for (size_t i = r.begin(); i != r.end(); i++) {
+                    if(torso_in_frame[i]){
+                        particles_torso_color_model[i] = compute_particle_color_model(torso_particles[i][0], torso_particles[i][1], torso_particles[i][2]);                        
+                    }
+                }
+            }
+        );
+#else
+        for (size_t i = 0; i < N; i++) {
+            if(torso_in_frame[i]){
+                particles_torso_color_model[i] = compute_particle_color_model(torso_particles[i][0], torso_particles[i][1], torso_particles[i][2]);                        
+            }
+        }
+#endif
+    }
+
     //third, weight them
-    auto weight_valid_particle = [this, &particles_color_model, &particles_ellipse_fitting] (const size_t i){
-        const float head_hist_distance = cv::compareHist(head_color_model, particles_color_model[i], CV_COMP_BHATTACHARYYA);
+
+    auto weight_valid_particle = [this, &particles_head_color_model, &particles_ellipse_fitting, &enough_chests_visible, &torso_in_frame, &particles_torso_color_model] (const size_t i){
+        const float head_hist_distance = cv::compareHist(head_color_model, particles_head_color_model[i], CV_COMP_BHATTACHARYYA);
         const float head_color_score  = (1 - head_hist_distance);
         const float head_fitting_score = particles_ellipse_fitting[i];
-        const float head_z_score = 1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
-        //printf("%f %f\n", std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001, z_score);
+        const float head_z_score =  1 - (2 * cdf(*depth_normal_distribution, std::abs(particles_valid_roi[i].get().d->z - last_distance) * 0.001) - 1);
+        
+        float chest_color_score = 1;
+        
+        if (enough_chests_visible && torso_in_frame[i]){
+            chest_color_score = 1 - cv::compareHist(torso_color_model, particles_torso_color_model[i], CV_COMP_BHATTACHARYYA);
+        }
         
         double score = 1;
         score *= head_color_score;
         score *= head_fitting_score;
         score *= head_z_score;
+        score *= chest_color_score;
 
         if (!object_found){
             score = score > 0.2 ? score : 0;
@@ -373,12 +433,13 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
         score = std::max(WEIGHT_INVALID, score);
 
         particles_valid_roi[i].get().log_w += log(score);
-        //printf("%f %f %f = %f (%f)\n", color_score, fitting_score, z_score, score, particles_valid_roi[i].get().log_w);
+
+        //printf("%f · %f · %f · %f = %f (%f)\n", head_color_score, head_fitting_score, head_z_score, chest_color_score, score, particles_valid_roi[i].get().log_w);
     };
 
 #ifdef USE_INTEL_TBB
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N, N / TBB_PARTITIONS),
-        [this, &particles_color_model, &weight_valid_particle](const tbb::blocked_range<size_t> &r) {
+        [this, &particles_head_color_model, &weight_valid_particle](const tbb::blocked_range<size_t> &r) {
             for (size_t i = r.begin(); i != r.end(); i++) {
                 weight_valid_particle(i);
             }

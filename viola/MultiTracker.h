@@ -88,7 +88,7 @@ struct MultiTracker {
 
     void tracking(const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
                   const cv::Mat &gradient_vectors, const CSensoryFrame &observation,
-                  CParticleFilter &PF, EllipseStash &ellipses)
+                  CParticleFilter &PF, EllipseStash &ellipses, const ImageRegistration &reg)
     {
         const size_t N = trackers.size();
         std::cout << "TRACKERS " << N << std::endl;
@@ -99,7 +99,7 @@ struct MultiTracker {
             static CParticleFilter::TParticleFilterStats stats;
             do_tracking(PF, particles, observation, stats);
             build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
-                depth_frame, ellipses);
+                depth_frame, ellipses, reg);
             
             score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals);
             

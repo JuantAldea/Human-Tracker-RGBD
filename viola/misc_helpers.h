@@ -117,21 +117,20 @@ inline bool rect_fits_in_rect(const cv::Rect &smaller, const cv::Rect &bigger)
         return false;
     }
 
-    if (smaller.x + smaller.width >= bigger.x + bigger.width || smaller.y + smaller.height >= bigger.y + bigger.height){
+    if ((smaller.x + smaller.width) > (bigger.x + bigger.width)){
         return false;
     }
 
-
-    if (smaller.width <= 0 || smaller.height <= 0){
+    if ((smaller.y + smaller.height) > (bigger.y + bigger.height)){
         return false;
     }
 
     return true;
 
-    const cv::Rect region_intersection = bigger & smaller;
+    //const cv::Rect region_intersection = bigger & smaller;
     //const cv::Rect region_intersection2 = smaller & bigger;
 
-    return smaller.area() == region_intersection.area();
+    //return smaller.area() == region_intersection.area();
 }
 
 inline bool rect_fits_in_frame(const cv::Rect &r, const cv::Mat &f)
@@ -144,4 +143,12 @@ inline bool rect_fits_in_frame(const cv::Rect &r, const cv::Mat &f)
 inline bool point_in_mat(const int x, const int y, const cv::Mat& mat)
 {
     return (x >= 0) && (x < mat.cols) && (y >= 0) && (y < mat.rows);
+}
+
+
+int handle_OpenCV_error( int status, const char* func_name, const char* err_msg, const char* file_name, int line, void* userdata )
+{
+    std::cerr << func_name << ": " << err_msg << std::endl;
+    throw;
+    return 0;
 }
