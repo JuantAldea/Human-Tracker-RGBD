@@ -252,10 +252,17 @@ int particle_filter()
 
     CDisplayWindow model_image_window("model-image");
     CDisplayWindow model_histogram_window("model_histogram_window");
+    CDisplayWindow model_histogram_torso_window("histogram torso");
     //CDisplayWindow gradient_depth_window("gradient_depth_window");
 
     //CDisplayWindow model_histogram_window2("2model_histogram_window");
     //CDisplayWindow model_candidate_histogram_window2("2model_candidate_histogram_window");
+
+     CDisplayWindow image_hist_chest_color_score_window ("chest_color_score_window");
+     CDisplayWindow image_hist_head_color_score_window ("head_color_score_window");
+     CDisplayWindow image_hist_head_fitting_score_window ("head_fitting_score_window");
+     CDisplayWindow image_hist_head_z_score_window ("head_z_score_window");
+     CDisplayWindow image_hist_score_window ("score_window");
 
 //#define VIEW_3D
 #ifdef VIEW_3D
@@ -343,8 +350,8 @@ int particle_filter()
         //std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
 
         // Observation building
-        color_frame = color_mat;
-        depth_frame = registered_depth;
+        color_frame = color_mat(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
+        depth_frame = registered_depth(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
         color_display_frame = color_frame.clone();
         
         uint64_t color_conversion_t0 = cv::getTickCount();
@@ -502,7 +509,65 @@ int particle_filter()
                 imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].color_model, 10))));
                 model_histogram_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
                 model_histogram_window.showImage(model_histogram_image);
+                
+                CImage model_histogram_torso_image;
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].torso_color_model, 10))));
+                model_histogram_torso_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                model_histogram_torso_window.showImage(model_histogram_torso_image);
             }
+            /*
+            //histograms
+            {
+                auto &tpf = trackers.trackers[0];
+                std::vector<double> x;
+                std::vector<double> hits;
+                
+                std::cout << "image_hist_score" << std::endl;
+                CImage image_hist_score;
+                tpf.hist_score.getHistogram(x, hits);
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(x, hits))));
+                image_hist_score.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                image_hist_score_window.showImage(image_hist_score);
+                x.clear();
+                hits.clear();
+
+                std::cout << "image_hist_head_color_score" << std::endl;
+                CImage image_hist_head_color_score;
+                tpf.hist_head_color_score.getHistogram(x, hits);
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(x, hits))));
+                image_hist_head_color_score.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                image_hist_head_color_score_window.showImage(image_hist_head_color_score);
+                x.clear();
+                hits.clear();
+
+                std::cout << "image_hist_head_fitting_score" << std::endl;
+                CImage image_hist_head_fitting_score;
+                tpf.hist_head_fitting_score.getHistogram(x, hits);
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(x, hits))));
+                image_hist_head_fitting_score.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                image_hist_head_fitting_score_window.showImage(image_hist_head_fitting_score);
+                x.clear();
+                hits.clear();
+
+                std::cout << "image_hist_head_z_score" << std::endl;
+                CImage image_hist_head_z_score;
+                tpf.hist_head_z_score.getHistogram(x, hits);
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(x, hits))));
+                image_hist_head_z_score.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                image_hist_head_z_score_window.showImage(image_hist_head_z_score);
+                x.clear();
+                hits.clear();
+                
+                std::cout << "image_hist_chest_color_score" << std::endl;
+                CImage image_hist_chest_color_score;
+                tpf.hist_chest_color_score.getHistogram(x, hits);
+                imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(x, hits))));
+                image_hist_chest_color_score.setFromIplImageReadOnly(imp_image_pointers.back().get());
+                image_hist_chest_color_score_window.showImage(image_hist_chest_color_score);
+                x.clear();
+                hits.clear();
+            }
+            */
 
             /*
             const cv::Mat mask_weight = ellipses->get_ellipse_mask_weights(trackers.states[0].z);
@@ -519,11 +584,14 @@ int particle_filter()
         //dispDepth(registered_depth, depthDisp, 12000.0f);
         //cv::Mat combined;
         //combine(color_mat, depthDisp, combined);
+        //int a = 140;
+        //int b = 290;
+        //cv::Mat combined2 = combined(cv::Rect(a, 0, combined.cols - a - b, combined.rows));
         //cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         //cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
 
         //CImage registered_depth_image;
-        //registered_depth_image.loadFromIplImage(new IplImage(combined));
+        //registered_depth_image.loadFromIplImage(new IplImage(combined2));
         //registered_color_window.showImage(registered_depth_image);
 
         CImage gradient_magnitude_image;

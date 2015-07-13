@@ -5,6 +5,11 @@
 
 template<typename DEPTH_TYPE>
 CImageParticleFilter<DEPTH_TYPE>::CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const normal_distribution) :
+    hist_chest_color_score(0,1,200),
+    hist_head_color_score(0,1,200),
+    hist_head_fitting_score(0,1,200),
+    hist_head_z_score(0,1,200),
+    hist_score(0,1,200),
     ellipses(ellipses),
     registration(reg),
     depth_normal_distribution(normal_distribution)
@@ -91,6 +96,11 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
     ASSERT_(image_depth);
 
     const cv::Mat depth_mat = cv::Mat(image_depth->image.getAs<IplImage>());
+    hist_head_color_score.clear();
+    hist_head_fitting_score.clear();
+    hist_head_z_score.clear();
+    hist_chest_color_score.clear();
+    hist_score.clear();
 
     auto update_particle = [&](const size_t i) {
         const double old_z = m_particles[i].d->z;
@@ -299,7 +309,6 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     }
 #endif
 
-
 float max_fitting = std::numeric_limits<float>::min();
 float min_fitting = std::numeric_limits<float>::max();;
 
@@ -408,6 +417,7 @@ bool enough_chests_visible = (n_particles_with_chest / float(N)) >= 0.9;
 
     //third, weight them
 
+
     auto weight_valid_particle = [this, &particles_head_color_model, &particles_ellipse_fitting, &enough_chests_visible, &torso_in_frame, &particles_torso_color_model] (const size_t i){
         const float head_hist_distance = cv::compareHist(head_color_model, particles_head_color_model[i], CV_COMP_BHATTACHARYYA);
         const float head_color_score  = (1 - head_hist_distance);
@@ -425,7 +435,6 @@ bool enough_chests_visible = (n_particles_with_chest / float(N)) >= 0.9;
         score *= head_fitting_score;
         score *= head_z_score;
         score *= chest_color_score;
-
         if (!object_found){
             score = score > 0.2 ? score : 0;
         }
@@ -435,6 +444,12 @@ bool enough_chests_visible = (n_particles_with_chest / float(N)) >= 0.9;
         particles_valid_roi[i].get().log_w += log(score);
 
         //printf("%f · %f · %f · %f = %f (%f)\n", head_color_score, head_fitting_score, head_z_score, chest_color_score, score, particles_valid_roi[i].get().log_w);
+        
+        hist_head_color_score.add(head_color_score);
+        hist_head_fitting_score.add(head_fitting_score);
+        hist_head_z_score.add(head_z_score);
+        hist_chest_color_score.add(chest_color_score);
+        hist_score.add(score);
     };
 
 #ifdef USE_INTEL_TBB

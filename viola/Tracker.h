@@ -162,5 +162,6 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
     std::cout << "TORSO SCORE" << new_state.torso_color_score << std::endl;
     
     //TODO UPDATE WITH DEPTH AND TORSO?
-    new_state.score_total = new_state.score_color * new_state.score_shape;
+    new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score;
+    printf("%f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_total);
 }

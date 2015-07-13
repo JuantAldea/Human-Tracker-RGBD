@@ -16,6 +16,7 @@ IGNORE_WARNINGS_PUSH
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
 #include <mrpt/gui/CDisplayWindow.h>
+#include <mrpt/math/CHistogram.h>
 using namespace mrpt::gui;
 
 IGNORE_WARNINGS_POP
@@ -27,6 +28,7 @@ IGNORE_WARNINGS_POP
 #include "EllipseStash.h"
 
 using namespace mrpt;
+using namespace mrpt::math;
 using namespace mrpt::bayes;
 using namespace mrpt::obs;
 using namespace mrpt::random;
@@ -61,6 +63,12 @@ class CImageParticleFilter :
 {
 
 public:
+    CHistogram hist_chest_color_score;
+    CHistogram hist_head_color_score;
+    CHistogram hist_head_fitting_score;
+    CHistogram hist_head_z_score;
+    CHistogram hist_score;
+
     static double WEIGHT_INVALID;
     CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const depth_distribution);
     using ParticleType = typename decltype(m_particles)::value_type;

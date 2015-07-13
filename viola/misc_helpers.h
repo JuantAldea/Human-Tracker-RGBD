@@ -152,3 +152,16 @@ int handle_OpenCV_error( int status, const char* func_name, const char* err_msg,
     throw;
     return 0;
 }
+
+cv::Mat histogram_to_image(const std::vector<double> &x, const std::vector<double> &hits)
+{
+    cv::Mat image = cv::Mat::zeros(1000, x.size(), CV_8U);
+    for (size_t i = 0; i < x.size(); i++){
+        std:: cout << i << ' ' <<  x[i] << ' ' << hits[i] / x.size()  << std::endl;
+        int height = cvRound((hits[i] / x.size()) * 1000);
+        const cv::Point base = cv::Point(i, 0);
+        const cv::Point top = cv::Point(i, height);
+        cv::line(image, base, top, cv::Scalar::all(255), 1);
+    }
+    return image;
+}

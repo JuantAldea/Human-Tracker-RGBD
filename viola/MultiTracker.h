@@ -233,8 +233,8 @@ struct MultiTracker {
             {
                 std::ostringstream oss;
                 std::ostringstream oss2;
-                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color;
-                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape << ' ' << estimated_new_state.score_color;
+                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score;
+                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score;
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
                 double fontScale = 2;
                 int thickness = 2;

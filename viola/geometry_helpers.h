@@ -322,4 +322,3 @@ Vector2i translate_2D_vector_in_3D_space(const int x, const int y, const float d
 
     return translate_2D_vector_in_3D_space(x, y, depth, translation, fx, fy, cx, cy, lookupX, lookupY);
 }
-
