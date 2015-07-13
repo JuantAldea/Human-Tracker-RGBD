@@ -110,7 +110,13 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
 
         m_particles[i].d->x += dt * m_particles[i].d->vx + transition_model_std_xy * randomGenerator.drawGaussian1D_normalized();
         m_particles[i].d->y += dt * m_particles[i].d->vy + transition_model_std_xy * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->z = 0;
+        m_particles[i].d->z = old_z;
+
+        m_particles[i].d->x = std::max(0.f, m_particles[i].d->x);
+        m_particles[i].d->x = std::min(float(depth_mat.cols - 1), m_particles[i].d->x);
+        
+        m_particles[i].d->y = std::max(0.f, m_particles[i].d->y);
+        m_particles[i].d->y = std::min(float(depth_mat.rows - 1), m_particles[i].d->y);
 
         if (point_in_mat(m_particles[i].d->x, m_particles[i].d->y, depth_mat)) {
             m_particles[i].d->z = depth_mat.at<DEPTH_TYPE>(cvRound(m_particles[i].d->y), cvRound(m_particles[i].d->x));
@@ -213,7 +219,7 @@ void CImageParticleFilter<DEPTH_TYPE>::weight_particles_with_model(const mrpt::o
     assert(particles_invalid_roi.size() + particles_valid_roi.size() == m_particles.size());
 
     if (!particles_valid_roi.size()){
-        throw;
+        //throw;
     }
 
     /*
@@ -435,8 +441,8 @@ bool enough_chests_visible = (n_particles_with_chest / float(N)) >= 0.9;
         score *= head_fitting_score;
         score *= head_z_score;
         score *= chest_color_score;
-        if (!object_found){
-            score = score > 0.2 ? score : 0;
+        if (!object_found) {
+            score = score >= 0.3 ? score : 0;
         }
 
         score = std::max(WEIGHT_INVALID, score);

@@ -47,7 +47,7 @@ struct MultiTracker {
         };
 
         if (states.size()){
-            //return;
+            return;
         }
 
         if (already_tracked(100)) {
@@ -233,10 +233,10 @@ struct MultiTracker {
             {
                 std::ostringstream oss;
                 std::ostringstream oss2;
-                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score;
+                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score << ' ' << trackers[i].transition_model_std_xy;
                 oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score;
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
-                double fontScale = 2;
+                double fontScale = 1;
                 int thickness = 2;
 
                 int baseline = 0;

@@ -22,6 +22,7 @@ struct StateEstimation
     float score_color;
     float score_shape;
     float score_total;
+    float score_z;
 
     cv::Mat torso_color_model;
     float torso_color_score;

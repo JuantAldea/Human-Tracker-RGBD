@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
 
     float cx = reg.cameraMatrixColor.at<double>(0, 2);
     float cy = reg.cameraMatrixColor.at<double>(1, 2);
-
+    std::cout << "cx " << cx << ' ' << "cy " << cy << std::endl;
     //const float cx = 1000 * 0.5;
     //const float cy = 500 * 0.5;
 

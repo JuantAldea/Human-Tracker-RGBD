@@ -350,8 +350,10 @@ int particle_filter()
         //std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
 
         // Observation building
-        color_frame = color_mat(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
-        depth_frame = registered_depth(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
+        //color_frame = color_mat(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
+        //depth_frame = registered_depth(cv::Rect(140, 0, color_mat.cols - 140 - 290, color_mat.rows));
+        color_frame = color_mat;
+        depth_frame = registered_depth;
         color_display_frame = color_frame.clone();
         
         uint64_t color_conversion_t0 = cv::getTickCount();
