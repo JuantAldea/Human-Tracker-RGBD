@@ -98,11 +98,12 @@ struct MultiTracker {
             const StateEstimation &estimated_state = states[i];
             static CParticleFilter::TParticleFilterStats stats;
             do_tracking(PF, particles, observation, stats);
+            printf("RADIUS0 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
                 depth_frame, ellipses, reg);
             
-            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals);
-            
+            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution);
+            printf("RADIUS1 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             particles.last_time = cv::getTickCount();
         }
     };
@@ -115,7 +116,7 @@ struct MultiTracker {
             StateEstimation &estimated_new_state = new_states[i];
             StateEstimation &estimated_state = states[i];
             const float score = estimated_new_state.score_total;
-
+            printf("RADIUS2 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             if (score > LIKEHOOD_FOUND) {
                 estimated_state.blend(estimated_new_state);
                 particles.set_head_color_model(estimated_state.color_model);
@@ -129,12 +130,14 @@ struct MultiTracker {
             }
 
             if (score < LIKEHOOD_FOUND) {
+                particles.set_object_missing();
+                //estimated_new_state = estimated_state;
                 particles.init_particles(NUM_PARTICLES,
-                                  make_pair(estimated_state.x, estimated_state.radius_x),
-                                  make_pair(estimated_state.y, estimated_state.radius_y),
+                                  make_pair(estimated_state.x, estimated_state.radius_x * 2),
+                                  make_pair(estimated_state.y, estimated_state.radius_y * 2),
                                   make_pair(float(estimated_state.z), 100.f),
                                   make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
-                particles.set_object_missing();
+                printf("INIT STD %f %d %d\n", particles.missing_uncertaincy_multipler, estimated_state.radius_x, estimated_state.radius_y);
             }
         }
     };
@@ -233,8 +236,15 @@ struct MultiTracker {
             {
                 std::ostringstream oss;
                 std::ostringstream oss2;
-                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score << ' ' << trackers[i].transition_model_std_xy;
-                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score;
+                
+                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape
+                    << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score
+                    << ' ' << estimated_state.score_z << ' ' << trackers[i].transition_model_std_xy;
+                
+                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape
+                     << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score
+                     << ' ' << estimated_new_state.score_z;
+                
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
                 double fontScale = 1;
                 int thickness = 2;
@@ -259,6 +269,7 @@ struct MultiTracker {
                 int radius = cvRound(1 + 1.0f/20 * max_w/exp(particles.m_particles[j].log_w) );
                 radius = std::min(radius, 255);
                 radius = std::max(radius, 1);
+                radius = 1;
                 cv::circle(color_display_frame,
                            cv::Point(particles.m_particles[j].d->x, particles.m_particles[j].d->y), radius,
                            GlobalColorPalette[i], 1, 1, 0);

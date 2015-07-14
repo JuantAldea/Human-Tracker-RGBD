@@ -97,6 +97,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
                        EllipseStash &ellipses, const ImageRegistration &reg)
 {
     particles.get_mean(new_state.x, new_state.y, new_state.z, new_state.v_x, new_state.v_y, new_state.v_z);
+    printf("RADIUS STATE: %f %f %f\n", new_state.x, new_state.y, new_state.z);
     Eigen::Vector2i top_corner, bottom_corner;
     const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(new_state.y),
                                          cvRound(new_state.x));
@@ -105,8 +106,9 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 
 
     const cv::Size projection_size = ellipses.get_ellipse_size(BodyPart::HEAD, z);
-    new_state.radius_x = projection_size.width * 0.5;
-    new_state.radius_y = projection_size.height * 0.5;
+    printf("RADIUS Z -> %d %d %f %f %f\n", projection_size.width, projection_size.height, z, center_measured_depth, old_state.z);
+    new_state.radius_x = (projection_size.width * 0.5);
+    new_state.radius_y = (projection_size.height * 0.5);
     new_state.center = cv::Point(new_state.x, new_state.y);
     new_state.region = cv::Rect(new_state.x - new_state.radius_x, new_state.y - new_state.radius_y,
                                 projection_size.width, projection_size.height);
@@ -140,7 +142,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 }
 
 void score_visual_model(const StateEstimation &state, StateEstimation &new_state, const cv::Mat &gradient_vectors,
-                        const std::vector<Eigen::Vector2f> &shape_model)
+                        const std::vector<Eigen::Vector2f> &shape_model, const boost::math::normal_distribution<float> &depth_normal_distribution)
 {
     if (new_state.color_model.empty()) {
         new_state.score_total = -1;
@@ -158,10 +160,11 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
 
     new_state.torso_color_score = 1 - cv::compareHist(new_state.torso_color_model, state.torso_color_model,
                                   CV_COMP_BHATTACHARYYA);
-    
+
+    new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z) * 0.001) - 1);
     std::cout << "TORSO SCORE" << new_state.torso_color_score << std::endl;
     
     //TODO UPDATE WITH DEPTH AND TORSO?
-    new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score;
-    printf("%f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_total);
+    new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score * new_state.score_z;
+    printf("%f · %f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_z, new_state.score_total);
 }

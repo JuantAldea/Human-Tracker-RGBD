@@ -120,10 +120,10 @@ public:
 #endif
 
     float transition_model_std_xy;
+    float missing_uncertaincy_multipler;
 protected:
     int64_t last_seen;
     bool object_found;
-    float missing_uncertaincy_multipler;
 
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_valid_roi;
     vector<reference_wrapper<typename decltype(m_particles)::value_type>> particles_invalid_roi;

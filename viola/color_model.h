@@ -205,7 +205,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     }
     int64_t t2 = cv::getTickCount();
 
-//#define USE_BILINEAR
+#define USE_BILINEAR
 #ifdef USE_BILINEAR
     TYPE_MAT image_gray_aux;
     TYPE_OP::bilateralFilter(image_gray, image_gray_aux, 15, 80, 80);

@@ -103,14 +103,17 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
     hist_score.clear();
 
     auto update_particle = [&](const size_t i) {
-        const double old_z = m_particles[i].d->z;
         const float old_x = m_particles[i].d->x;
         const float old_y = m_particles[i].d->y;
+        const double old_z = m_particles[i].d->z;
 
-
-        m_particles[i].d->x += dt * m_particles[i].d->vx + transition_model_std_xy * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->y += dt * m_particles[i].d->vy + transition_model_std_xy * randomGenerator.drawGaussian1D_normalized();
-        m_particles[i].d->z = old_z;
+        m_particles[i].d->x += object_found * (dt * m_particles[i].d->vx + MODEL_TRANSITION_STD_XY * randomGenerator.drawGaussian1D_normalized());
+        m_particles[i].d->y += object_found * (dt * m_particles[i].d->vy + MODEL_TRANSITION_STD_XY * randomGenerator.drawGaussian1D_normalized());
+        m_particles[i].d->z  = object_found * (old_z);
+        
+        const float xx = m_particles[i].d->x;
+        const float yy = m_particles[i].d->y;
+        const float zz = m_particles[i].d->z;
 
         m_particles[i].d->x = std::max(0.f, m_particles[i].d->x);
         m_particles[i].d->x = std::min(float(depth_mat.cols - 1), m_particles[i].d->x);
@@ -138,6 +141,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
 
             m_particles[i].d->valid = rect_fits_in_frame(particle_roi, depth_mat);
         }
+        //printf("%f %f %f - %f %f %f\n", xx, yy, zz, m_particles[i].d->x, m_particles[i].d->y, m_particles[i].d->z);
     };
 
     size_t N = m_particles.size();
@@ -499,24 +503,26 @@ void CImageParticleFilter<DEPTH_TYPE>::prediction_and_update_pfStandardProposal(
 }
 
 template<typename DEPTH_TYPE>
-void CImageParticleFilter<DEPTH_TYPE>::init_particles(const size_t M, const pair<float, float> &x,
+void CImageParticleFilter<DEPTH_TYPE>::init_particles(const size_t n_particles, const pair<float, float> &x,
         const pair<float, float> &y, const pair<float, float> &z, const pair<float, float> &v_x,
         const pair<float, float> &v_y, const pair<float, float> &v_z)
 {
     clearParticles();
-    m_particles.resize(M);
+    m_particles.resize(n_particles);
 
     for (CParticleList::iterator it = m_particles.begin(); it != m_particles.end(); it++) {
         it->d = new ParticleData();
 
-        it->d->x = randomGenerator.drawGaussian1D(x.first, x.second);
-        it->d->y = randomGenerator.drawGaussian1D(y.first, y.second);
-        it->d->z = randomGenerator.drawGaussian1D(z.first, z.second);
+        it->d->x = x.first + x.second * randomGenerator.drawGaussian1D_normalized();
+        it->d->y = y.first + y.second * randomGenerator.drawGaussian1D_normalized();
+        it->d->z = z.first + z.second * randomGenerator.drawGaussian1D_normalized();
 
-        it->d->vx = randomGenerator.drawGaussian1D(v_x.first, v_x.second);
-        it->d->vy = randomGenerator.drawGaussian1D(v_y.first, v_y.second);
-        it->d->vz = randomGenerator.drawGaussian1D(v_z.first, v_z.second);
-
+        it->d->vx = v_x.first + v_x.second * randomGenerator.drawGaussian1D_normalized();
+        it->d->vy = v_y.first + v_y.second * randomGenerator.drawGaussian1D_normalized();
+        it->d->vz = v_z.first + v_z.second * randomGenerator.drawGaussian1D_normalized();
+        
+        printf("INIT: %f %f %f\n", it->d->x, it->d->y, it->d->z);
+        
         it->log_w = 0;
     }
 }
