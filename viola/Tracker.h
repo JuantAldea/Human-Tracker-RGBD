@@ -161,7 +161,7 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
     new_state.torso_color_score = 1 - cv::compareHist(new_state.torso_color_model, state.torso_color_model,
                                   CV_COMP_BHATTACHARYYA);
 
-    new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z) * 0.001) - 1);
+    new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z)) - 1);
     std::cout << "TORSO SCORE" << new_state.torso_color_score << std::endl;
     
     //TODO UPDATE WITH DEPTH AND TORSO?
