@@ -162,7 +162,6 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
                                   CV_COMP_BHATTACHARYYA);
 
     new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z)) - 1);
-    std::cout << "TORSO SCORE" << new_state.torso_color_score << std::endl;
     
     //TODO UPDATE WITH DEPTH AND TORSO?
     new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score * new_state.score_z;

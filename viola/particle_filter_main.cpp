@@ -181,11 +181,10 @@ int particle_filter()
     }
 
     //kinect2 initialization
-    std::string serial = freenect2.getDefaultDeviceSerialNumber();
+    const std::string serial = freenect2.getDefaultDeviceSerialNumber();
     
-
     char *calib_dir = getenv("HOME");
-    std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
+    const std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
 
     //Registration initialization
     ImageRegistration reg;
