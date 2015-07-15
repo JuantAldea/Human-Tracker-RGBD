@@ -95,6 +95,7 @@ ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
 #ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
+ADD_EXECUTABLE(kinect2_recorder kinect2_recorder.cpp)
 
 #ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 #ADD_EXECUTABLE(calibration_pairs calibration_pairs.cpp)
@@ -125,6 +126,10 @@ TARGET_LINK_LIBRARIES(Boost-normal
 )
 ]]
 
+TARGET_LINK_LIBRARIES(kinect2_recorder
+    ${freenect2_LIBRARY}
+    ${OpenCV_LIBS}
+)
 
 TARGET_LINK_LIBRARIES(model_projections_precalculator
     model_parameters
