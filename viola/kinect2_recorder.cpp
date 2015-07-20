@@ -83,22 +83,29 @@ int handle_OpenCV_error( int status, const char* func_name, const char* err_msg,
 void write_images_threads(const int frame_count, uchar * __restrict  rgb_data, uchar * __restrict  depth_data)
 {
     const cv::Mat color_mat = cv::Mat(rgb_height, rgb_width, CV_8UC3, rgb_data);
+    const cv::Mat depth_mat = cv::Mat(depth_height, depth_width, CV_32FC1, depth_data);
+
     const cv::Mat depth_mat_1_3 = cv::Mat(depth_height, depth_width, CV_8UC3);
-    const cv::Mat depth_mat_4 = cv::Mat(depth_height, depth_width, CV_8UC1);
+    const cv::Mat depth_mat_4 = cv::Mat(depth_height, depth_width, CV_8UC3);
 
-    uchar * __restrict ptr_1_3 = (uchar*) depth_mat_1_3.data;
-    uchar *__restrict ptr_4 = (uchar*) depth_mat_4.data;
-    uchar * __restrict ptr_depth = (uchar*) depth_data;
+    uchar *depth3_ptr = depth_mat_1_3.data;
+    uchar *depth4_ptr = depth_mat_4.data;
+    uchar *depth_ptr = depth_mat.data;
+    
+    for (size_t i = 0; i < n_pixels_depth; i++){
+      *(depth3_ptr + 0) = *(depth_ptr + 0);
+      *(depth3_ptr + 1) = *(depth_ptr + 1);
+      *(depth3_ptr + 2) = *(depth_ptr + 2);
+      *(depth4_ptr + 0) = *(depth_ptr + 3);
+      
+      //*(depth4_ptr + 1) = *(depth_ptr + 3);
+      //*(depth4_ptr + 2) = *(depth_ptr + 3);
 
-    for (size_t i = 0 ; i < n_pixels_depth; i++){
-        *(ptr_1_3 + 0) = *(ptr_depth + 0);
-        *(ptr_1_3 + 1) = *(ptr_depth + 1);
-        *(ptr_1_3 + 3) = *(ptr_depth + 2);
-        *(ptr_4   + 0) = *(ptr_depth + 3);
-        ptr_1_3 += 3;
-        ptr_4 += 1;
-        ptr_depth += 4;
+      depth3_ptr += 3;
+      depth4_ptr += 3;
+      depth_ptr += 4;
     }
+
 
     std::ostringstream out_depth_1_3;
     std::ostringstream out_depth_4;

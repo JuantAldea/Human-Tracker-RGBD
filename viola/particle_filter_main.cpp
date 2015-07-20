@@ -42,6 +42,9 @@ IGNORE_WARNINGS_POP
 #include "Tracker.h"
 #include "EllipseStash.h"
 
+#include "Kinect2Camera.h"
+#include "Kinect2VideoReader.h"
+
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
@@ -51,20 +54,6 @@ using namespace mrpt::opengl;
 using namespace mrpt::maps;
 
 using namespace std;
-
-libfreenect2::Freenect2Device *dev;
-libfreenect2::Freenect2 freenect2;
-libfreenect2::SyncMultiFrameListener *listener;
-libfreenect2::FrameMap frames_kinect2;
-libfreenect2::PacketPipeline *pipeline;
-
-void close_kinect2_handler(void)
-{
-    listener->waitForNewFrame(frames_kinect2);
-    listener->release(frames_kinect2);
-    dev->stop();
-    dev->close();
-}
 
 void dispDepth(const cv::Mat &in, cv::Mat &out, const float maxValue)
 {
@@ -173,70 +162,18 @@ int particle_filter()
         return -1;
     }
 
-
-
-    if (freenect2.enumerateDevices() == 0) {
-        std::cout << "no device connected!" << std::endl;
-        return -1;
-    }
-
-    //kinect2 initialization
-    const std::string serial = freenect2.getDefaultDeviceSerialNumber();
+    //Kinect2Camera video_feed;
+    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
     
     char *calib_dir = getenv("HOME");
     const std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
 
     //Registration initialization
     ImageRegistration reg;
-    reg.init(calib_path, serial);
+    reg.init(calib_path, video_feed.get_device_serial_number());
 
     //load or precompute ellipses projections
     EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO}, std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.300000x0.200000.bin"});
-
-    pipeline = new libfreenect2::OpenCLPacketPipeline();
-
-    const float minDepth = 0;
-    const float maxDepth = 12.0;
-    const bool bilateral_filter = true;
-    const bool edge_aware_filter = true;
-
-    libfreenect2::DepthPacketProcessor::Config config;
-    config.EnableBilateralFilter = bilateral_filter;
-    config.EnableEdgeAwareFilter = edge_aware_filter;
-    config.MinDepth = minDepth;
-    config.MaxDepth = maxDepth;
-
-    pipeline->getDepthPacketProcessor()->setConfiguration(config);
-    dev = freenect2.openDevice(serial, pipeline);
-
-    if (dev == nullptr) {
-        std::cout << "no device connected or failure opening the default one!" << std::endl;
-        exit(-1);
-    }
-
-    //listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Ir | libfreenect2::Frame::Depth);
-    listener = new libfreenect2::SyncMultiFrameListener(libfreenect2::Frame::Color | libfreenect2::Frame::Depth);
-    dev->setColorFrameListener(listener);
-    dev->setIrAndDepthFrameListener(listener);
-    dev->start();
-
-
-    /*
-    struct sigaction sigIntHandler;
-
-    sigIntHandler.sa_handler = [](int) {
-        std::cout << "SIGINT" << std::endl;
-        close_kinect2_handler();
-    };
-
-    sigemptyset(&sigIntHandler.sa_mask);
-    sigIntHandler.sa_flags = 0;
-    sigaction(SIGINT, &sigIntHandler, NULL);
-    sigaction(SIGQUIT, &sigIntHandler, NULL);
-    sigaction(SIGSEGV, &sigIntHandler, NULL);
-    //atexit(close_kinect2_handler);
-    //at_quick_exit(close_kinect2_handler);
-    */
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
@@ -326,14 +263,10 @@ int particle_filter()
 
         // Adquisition
         uint64_t read_kinect_t0 = cv::getTickCount();
-        listener->waitForNewFrame(frames_kinect2);
-        libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
-        libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
-        //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
 
-        cv::Mat color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
-        cv::Mat depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
-        //cv::Mat ir_mat = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
+        cv::Mat color_mat, depth_mat;
+        
+        video_feed.grab(color_mat, depth_mat);
         
         float read_kinect_t = (cv::getTickCount() - read_kinect_t0) / double(cv::getTickFrequency());
         //std::cout << "TIMES_READ_KINECT " << read_kinect_t << std::endl;
@@ -581,19 +514,19 @@ int particle_filter()
         }
 
         //visualization
-        //cv::Mat depthDisp;
-        //dispDepth(registered_depth, depthDisp, 12000.0f);
-        //cv::Mat combined;
-        //combine(color_mat, depthDisp, combined);
+        cv::Mat depthDisp;
+        dispDepth(registered_depth, depthDisp, 12000.0f);
+        cv::Mat combined;
+        combine(color_mat, depthDisp, combined);
         //int a = 140;
         //int b = 290;
         //cv::Mat combined2 = combined(cv::Rect(a, 0, combined.cols - a - b, combined.rows));
         //cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         //cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
 
-        //CImage registered_depth_image;
-        //registered_depth_image.loadFromIplImage(new IplImage(combined2));
-        //registered_color_window.showImage(registered_depth_image);
+        CImage registered_depth_image;
+        registered_depth_image.loadFromIplImage(new IplImage(combined));
+        registered_color_window.showImage(registered_depth_image);
 
         CImage gradient_magnitude_image;
         imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(gradient_magnitude_scaled)));
@@ -663,15 +596,11 @@ int particle_filter()
             counter = 0;
         }
 
-        listener->release(frames_kinect2);
+        
         //cout << "TIME_TOTAL " << read_kinect_t + color_conversion_t + sobel_t + viola_t + tracking_t << std::endl;
     }
+    video_feed.close();
 
-
-    listener->waitForNewFrame(frames_kinect2);
-    listener->release(frames_kinect2);
-    dev->stop();
-    dev->close();
     return 0;
 }
 

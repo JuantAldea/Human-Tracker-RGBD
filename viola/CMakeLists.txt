@@ -10,9 +10,9 @@ SET(CMAKE_CXX_STANDARD 11)
 
 #SET(CMAKE_CXX_FLAGS_DEBUG "${viola_SOURCE_DIR} -ggdb3 -O0 -pg -std=c++11 -fbuiltin -fno-inline")
 #SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} --fast-math -O3 -flto")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin -fdiagnostics-color=always -Wno-unused-parameter")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin -fdiagnostics-color=always -Wno-unused-parameter -Wno-unused-variable")
 
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer -fdiagnostics-color=always")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer -fdiagnostics-color=always -Wno-unused-variable")
 #SET(CMAKE_EXE_LINKER_FLAGS "-pg")
 
 FIND_PACKAGE(PkgConfig QUIET)
@@ -90,12 +90,15 @@ SET_TARGET_PROPERTIES(BoostSerializers PROPERTIES LINKER_LANGUAGE CXX)
 ADD_LIBRARY(FacesDetection STATIC faces_detection.cpp)
 ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
 
-
+ADD_LIBRARY(Kinect2VideoReader STATIC Kinect2VideoReader.h)
+SET_TARGET_PROPERTIES(Kinect2VideoReader PROPERTIES LINKER_LANGUAGE CXX)
 
 #ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 
 ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 ADD_EXECUTABLE(kinect2_recorder kinect2_recorder.cpp)
+
+ADD_EXECUTABLE(kinect2_video_replay Kinect2VideoReplay.cpp)
 
 #ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 #ADD_EXECUTABLE(calibration_pairs calibration_pairs.cpp)
@@ -128,6 +131,10 @@ TARGET_LINK_LIBRARIES(Boost-normal
 
 TARGET_LINK_LIBRARIES(kinect2_recorder
     ${freenect2_LIBRARY}
+    ${OpenCV_LIBS}
+)
+
+TARGET_LINK_LIBRARIES(kinect2_video_replay
     ${OpenCV_LIBS}
 )
 
