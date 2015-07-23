@@ -22,7 +22,6 @@ FIND_PACKAGE(PkgConfig QUIET)
 #SET(VIEW_3D 1)
 
 SET(USE_KINECT_2 1)
-
 SET(USE_INTEL_TBB 1)
 IF(${USE_INTEL_TBB})
     SET(TBB_PARTITIONS 8)
@@ -43,6 +42,9 @@ endif()
 INCLUDE(depth_registration)
 INCLUDE_DIRECTORIES(${DEPTH_REGISTRATION_INCLUDE_DIR})
 
+SET(USE_AVX_INSTRUCTIONS 1)
+INCLUDE(dlib-18.16/dlib/cmake)
+
 INCLUDE(libusb_dep)
 
 FIND_PACKAGE(OpenCV REQUIRED)
@@ -50,48 +52,35 @@ FIND_PACKAGE(libfreenect REQUIRED)
 FIND_PACKAGE(freenect2 REQUIRED)
 FIND_PACKAGE(MRPT REQUIRED base bayes obs gui maps)
 
+MACRO(add_header_lib name)
+   ADD_LIBRARY(${name} STATIC ${name}.h)
+   SET_TARGET_PROPERTIES(${name} PROPERTIES LINKER_LANGUAGE CXX)
+ENDMACRO()
 
 #INCLUDE_DIRECTORIES(${freenect2_INCLUDE_DIR})
 LINK_DIRECTORIES(${viola_SOURCE_DIR})
 
-ADD_LIBRARY(ImageParticleFilter STATIC CImageParticleFilter.h)
-SET_TARGET_PROPERTIES(ImageParticleFilter PROPERTIES LINKER_LANGUAGE CXX)
+add_header_lib(EllipseStash)
+add_header_lib(Tracker)
+add_header_lib(MultiTracker)
+add_header_lib(StateEstimation)
+add_header_lib(BoostSerializers)
+add_header_lib(Kinect2VideoReader)
+add_header_lib(ModelParameters)
+add_header_lib(ColorModel)
+add_header_lib(GeometryHelpers)
+add_header_lib(MiscHelpers)
+add_header_lib(EllipseFunctions)
 
-ADD_LIBRARY(model_parameters STATIC model_parameters.h)
-SET_TARGET_PROPERTIES(model_parameters PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(EllipseStash STATIC EllipseStash.h)
-SET_TARGET_PROPERTIES(EllipseStash PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(Tracker STATIC Tracker.h)
-SET_TARGET_PROPERTIES(Tracker PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(MultiTracker STATIC MultiTracker.h)
-SET_TARGET_PROPERTIES(MultiTracker PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(StateEstimation STATIC StateEstimation.h)
-SET_TARGET_PROPERTIES(StateEstimation PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(EllipseFunctions STATIC ellipse_functions.h)
-SET_TARGET_PROPERTIES(EllipseFunctions PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(ColorModel STATIC color_model.h)
-SET_TARGET_PROPERTIES(ColorModel PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(GeometryHelpers STATIC geometry_helpers.h)
-SET_TARGET_PROPERTIES(GeometryHelpers PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(MiscHelpers STATIC misc_helpers.h)
-SET_TARGET_PROPERTIES(MiscHelpers PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(BoostSerializers STATIC BoostSerializers.h)
-SET_TARGET_PROPERTIES(BoostSerializers PROPERTIES LINKER_LANGUAGE CXX)
-
-ADD_LIBRARY(FacesDetection STATIC faces_detection.cpp)
+ADD_LIBRARY(FacesDetection STATIC FacesDetection.cpp)
 ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
 
-ADD_LIBRARY(Kinect2VideoReader STATIC Kinect2VideoReader.h)
-SET_TARGET_PROPERTIES(Kinect2VideoReader PROPERTIES LINKER_LANGUAGE CXX)
+#add_header_lib(ImageRegistration)
+#add_header_lib(FacesDetection)
+
+
+ADD_LIBRARY(ImageParticleFilter STATIC CImageParticleFilter.h)
+SET_TARGET_PROPERTIES(ImageParticleFilter PROPERTIES LINKER_LANGUAGE CXX)
 
 #ADD_LIBRARY(KinectCamera SHARED KinectCamera.cpp)
 
@@ -139,7 +128,7 @@ TARGET_LINK_LIBRARIES(kinect2_video_replay
 )
 
 TARGET_LINK_LIBRARIES(model_projections_precalculator
-    model_parameters
+    ModelParameters
     ImageRegistration
     EllipseFunctions
     GeometryHelpers
@@ -173,7 +162,8 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     StateEstimation
     EllipseStash
     BoostSerializers
-    model_parameters
+    ModelParameters
+    dlib
 )
 
 #[[

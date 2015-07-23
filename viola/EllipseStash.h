@@ -5,9 +5,9 @@
 using namespace std;
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
-#include "ellipse_functions.h"
+#include "EllipseFunctions.h"
 #include "ImageRegistration.h"
-#include "model_parameters.h"
+#include "ModelParameters.h"
 /*
 enum class BodyPart
 {

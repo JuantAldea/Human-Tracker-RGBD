@@ -8,7 +8,7 @@ IGNORE_WARNINGS_PUSH
 
 IGNORE_WARNINGS_POP
 
-#include "misc_helpers.h"
+#include "MiscHelpers.h"
 using namespace Eigen;
 
 cv::Mat create_ellipse_mask(const cv::Point &center, const int axis_x, const int axis_y, const int n_dims);

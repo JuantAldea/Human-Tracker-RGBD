@@ -1,14 +1,17 @@
 #pragma once
 
-#include "project_config.h"
-#include "ellipse_functions.h"
 
 IGNORE_WARNINGS_PUSH
 
 #include <mrpt/otherlibs/do_opencv_includes.h>
 #include <opencv2/ocl/ocl.hpp>
 IGNORE_WARNINGS_POP
+
 #include <cassert>
+
+#include "project_config.h"
+#include "EllipseFunctions.h"
+
 cv::Mat compute_color_model(const cv::Mat &hsv, const cv::Mat &mask);
 cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale);
 std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image);

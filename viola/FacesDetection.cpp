@@ -1,4 +1,4 @@
-#include "faces_detection.h"
+#include "FacesDetection.h"
 
 using namespace cv;
 

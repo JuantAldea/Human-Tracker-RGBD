@@ -21,9 +21,9 @@ using namespace mrpt::gui;
 
 IGNORE_WARNINGS_POP
 
-#include "geometry_helpers.h"
-#include "color_model.h"
-#include "ellipse_functions.h"
+#include "GeometryHelpers.h"
+#include "ColorModel.h"
+#include "EllipseFunctions.h"
 #include "ImageRegistration.h"
 #include "EllipseStash.h"
 

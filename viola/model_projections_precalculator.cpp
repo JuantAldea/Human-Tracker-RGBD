@@ -1,14 +1,16 @@
-#include "ellipse_functions.h"
-#include "ImageRegistration.h"
-#include "geometry_helpers.h"
-
-#include "BoostSerializers.h"
 
 #include <string>
 #include <map>
 #include <fstream>
 #include <tuple>
 #include <opencv2/opencv.hpp>
+
+#include "EllipseFunctions.h"
+#include "ImageRegistration.h"
+#include "GeometryHelpers.h"
+
+#include "BoostSerializers.h"
+
 /*
 #include <Eigen/Sparse>
 #include <Eigen/Core>
