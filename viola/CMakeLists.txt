@@ -105,8 +105,8 @@ ADD_EXECUTABLE(kinect2_video_replay Kinect2VideoReplay.cpp)
 ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
 
 FIND_PACKAGE(OpenCL REQUIRED)
-find_package(Boost REQUIRED system serialization)
-include_directories(${Boost_INCLUDE_DIRS})
+FIND_PACKAGE(Boost REQUIRED system serialization)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 
 TARGET_LINK_LIBRARIES(ImageRegistration
     ${DEPTH_REGISTRATION_LIBRARY}
