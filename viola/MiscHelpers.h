@@ -14,6 +14,7 @@
 #include <mrpt/otherlibs/do_opencv_includes.h>
 
 #pragma GCC diagnostic pop
+
 #include <string>
 
 std::string type2str(int type)
@@ -137,6 +138,21 @@ inline bool rect_fits_in_frame(const cv::Rect &r, const cv::Mat &f)
     return rect_fits_in_rect(r, frame_region);
 }
 
+
+inline cv::Rect clamp_rect_to_frame(const cv::Rect &r, const cv::Mat &f)
+{
+    const int x_0 = r.x;
+    const int y_0 = r.y;
+
+    const int x_1 = r.x + r.width - 1;
+    const int y_1 = r.y + r.height - 1;
+
+    const int clamped_x0 = std::max(0, x_0);
+    const int clamped_y0 = std::max(0, y_0);
+    const int clamped_x1 = std::min(f.cols - 1, x_1);
+    const int clamped_y1 = std::min(f.rows - 1, y_1);
+    return cv::Rect(clamped_x0, clamped_y0, clamped_x1 - clamped_x0, clamped_y1 - clamped_y0);
+}
 
 inline bool point_in_mat(const int x, const int y, const cv::Mat& mat)
 {

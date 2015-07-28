@@ -167,7 +167,7 @@ int particle_filter()
     }
 #endif
 
-//#define DLIB
+#define DLIB
 #ifdef DLIB
     dlib::frontal_face_detector face_detector = dlib::get_frontal_face_detector();
 #endif
@@ -175,7 +175,7 @@ int particle_filter()
 
     Kinect2Camera video_feed;
     //Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
-    
+
     char *calib_dir = getenv("HOME");
     const std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
 
@@ -276,15 +276,15 @@ int particle_filter()
         uint64_t read_kinect_t0 = cv::getTickCount();
 
         cv::Mat color_mat, depth_mat;
-        
+
         video_feed.grab(color_mat, depth_mat);
-        
+
         float read_kinect_t = (cv::getTickCount() - read_kinect_t0) / double(cv::getTickFrequency());
         //std::cout << "TIMES_READ_KINECT " << read_kinect_t << std::endl;
 
         //Registration
         uint64_t registration_t0 = cv::getTickCount();
-        
+
         cv::Mat registered_depth;
         reg.register_images(color_mat, depth_mat, registered_depth);
         cv::flip(color_mat, color_mat, 1);
@@ -298,17 +298,17 @@ int particle_filter()
         color_frame = color_mat;
         depth_frame = registered_depth;
         color_display_frame = color_frame.clone();
-        
+
         uint64_t color_conversion_t0 = cv::getTickCount();
 
-#define OCL_CONVERSION 
+#define OCL_CONVERSION
 #ifdef OCL_CONVERSION
         cv::ocl::oclMat ocl_hsv_frame;
         cv::ocl::oclMat ocl_color_frame(color_frame);
         cv::ocl::cvtColor(ocl_color_frame, ocl_hsv_frame, cv::COLOR_BGR2HSV);
         cv::ocl::oclMat ocl_gray_frame;
         cv::ocl::cvtColor(ocl_color_frame, ocl_gray_frame, cv::COLOR_BGR2GRAY);
-        
+
         cv::Mat hsv_frame = ocl_hsv_frame;
         cv::Mat gray_frame = ocl_gray_frame;
 #else
@@ -319,15 +319,15 @@ int particle_filter()
 #endif
         float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
         //std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
-             
+
         //cv::Mat hsv_frame;
         //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
 
         uint64_t sobel_t0 = cv::getTickCount();
-        
+
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(gray_frame);
-        
+
         float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
 
         CObservationImagePtr obsImage_color = CObservationImage::Create();
@@ -335,7 +335,7 @@ int particle_filter()
         CObservationImagePtr obsImage_depth = CObservationImage::Create();
         CObservationImagePtr obsImage_gradient_vectors = CObservationImage::Create();
         CObservationImagePtr obsImage_gradient_magnitude = CObservationImage::Create();
-        
+
         const std::unique_ptr<IplImage> ipl_image_color_frame(new IplImage(color_frame));
         const std::unique_ptr<IplImage> ipl_image_hsv_frame(new IplImage(hsv_frame));
         const std::unique_ptr<IplImage> ipl_image_depth_frame( new IplImage(depth_frame));
@@ -369,7 +369,15 @@ int particle_filter()
         std::vector<cv::Vec3f> circles;
 
         uint64_t viola_t0 = cv::getTickCount();
-        std::vector<cv::Rect> faces_roi;
+
+        cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
+        std::vector<cv::Rect> faces_roi = viola_faces::detect_faces_dual(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1, face_detector, color_frame, color_display_frame);
+
+        for (auto &roi : faces_roi){
+            circles.push_back(cv::Vec3f(roi.x + roi.width / 2, roi.y + roi.height / 2, roi.width / 2));
+        }
+
+/*
 #ifdef VIOLA
         cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
         std::vector<viola_faces::face> faces = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
@@ -378,7 +386,7 @@ int particle_filter()
             //circles.push_back(cv::Vec3f(face.first.x + face.first.width / 2, face.first.y + face.first.height / 2, face.first.width / 2));
         }
 #endif
-
+*/
 /*
 #ifdef DLIB
         cv::Mat color_frame_upper_half = color_frame(cv::Rect(0, 0, color_frame.cols, color_frame.rows * 0.75));
@@ -389,19 +397,19 @@ int particle_filter()
         }
 #endif
 */
-
+/*
 #ifdef DLIB
         for (auto &roi : faces_roi){
             const int x = std::max(0, int(roi.x - roi.width / 4));
             const int y = std::max(0, int(roi.y - roi.height / 4));
-            
+
             const int width = std::min(int(roi.width * 1.5), color_frame.cols - 1 - roi.x);
             const int height = std::min(int(roi.height * 1.5), color_frame.rows - 1 - roi.y);
             const cv::Rect extended_roi = cv::Rect(x, y, width, height);
 
             dlib::cv_image<dlib::bgr_pixel> dlib_img(color_frame(extended_roi));
             std::vector<dlib::rectangle> faces = face_detector(dlib_img);
-            
+
             if(faces.empty()){
                 continue;
             }
@@ -409,10 +417,11 @@ int particle_filter()
             circles.push_back(cv::Vec3f(roi.x + roi.width / 2, roi.y + roi.height / 2, roi.width / 2));
         }
 #endif
+*/
         float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
 
         //std::cout << "TIMES_VIOLA " << viola_t << std::endl;
-        
+
         if (circles.size() != 0) {
             int circle_max = 0;
             double radius_max = circles[0][2];
@@ -452,17 +461,25 @@ int particle_filter()
 #ifdef VISUALIZATION
         uint64_t visualization_t0 = cv::getTickCount();
 
+        for (auto &face : faces_roi){
+            //cv::rectangle(color_display_frame, face, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
+        }
+/*
 #ifdef VIOLA
         viola_faces::print_faces(faces, color_display_frame, 1, 1);
 #endif
 
 #ifdef DLIB
+#ifndef VIOLA
         for (auto &face : faces){
             const cv::Point p0(face.left(), face.top());
             const cv::Point p1(face.right(), face.bottom());
             cv::rectangle(color_display_frame, p0, p1, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
+            //cv::rectangle(color_display_frame, face.first, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
         }
 #endif
+#endif
+*/
 
         for (auto circle : circles){
             cv::Point center(cvRound(circle[0]), cvRound(circle[1]));
@@ -484,9 +501,9 @@ int particle_filter()
         }
 
         trackers.show(color_display_frame, depth_frame);
-        
+
         std::vector<std::unique_ptr<IplImage>> imp_image_pointers;
-        
+
         if (trackers.states.size()){
             if (rect_fits_in_frame(trackers.states[0].region, color_frame)){
                 imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_frame(trackers.states[0].region))));
@@ -498,7 +515,7 @@ int particle_filter()
                 imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].color_model, 10))));
                 model_histogram_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
                 model_histogram_window.showImage(model_histogram_image);
-                
+
                 CImage model_histogram_torso_image;
                 imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(histogram_to_image(trackers.states[0].torso_color_model, 10))));
                 model_histogram_torso_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
@@ -510,7 +527,7 @@ int particle_filter()
                 auto &tpf = trackers.trackers[0];
                 std::vector<double> x;
                 std::vector<double> hits;
-                
+
                 std::cout << "image_hist_score" << std::endl;
                 CImage image_hist_score;
                 tpf.hist_score.getHistogram(x, hits);
@@ -546,7 +563,7 @@ int particle_filter()
                 image_hist_head_z_score_window.showImage(image_hist_head_z_score);
                 x.clear();
                 hits.clear();
-                
+
                 std::cout << "image_hist_chest_color_score" << std::endl;
                 CImage image_hist_chest_color_score;
                 tpf.hist_chest_color_score.getHistogram(x, hits);
@@ -604,7 +621,7 @@ int particle_filter()
 
 
         CImage color_display_image;
-        imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_display_frame)));        
+        imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_display_frame)));
         color_display_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
         image.showImage(color_display_image);
 
@@ -637,7 +654,7 @@ int particle_filter()
         win3D.repaint();
 #endif
         float visualization_t = (cv::getTickCount() - visualization_t0) / double(cv::getTickFrequency());
-        //std::cout << "TIMES_VISUALIZATION " << visualization_t << std::endl;        
+        //std::cout << "TIMES_VISUALIZATION " << visualization_t << std::endl;
 #endif
         counter++;
         if (counter > 30){
@@ -651,7 +668,7 @@ int particle_filter()
             counter = 0;
         }
 
-        
+
         //cout << "TIME_TOTAL " << read_kinect_t + color_conversion_t + sobel_t + viola_t + tracking_t << std::endl;
     }
     video_feed.close();

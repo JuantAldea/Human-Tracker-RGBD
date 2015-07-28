@@ -5,9 +5,11 @@
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
-
+#include <dlib/opencv.h>
+#include <dlib/image_processing/frontal_face_detector.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
 #include <opencv2/ocl/ocl.hpp>
+
 IGNORE_WARNINGS_POP
 
 namespace viola_faces
@@ -29,5 +31,8 @@ faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifi
 void print_faces(const faces &detected_faces, cv::Mat &frame, const float scale_width, const float scale_height);
 
 std::vector<cv::Vec3f> detect_circles(const cv::Mat &image);
+
+std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade,
+    const float scale, dlib::frontal_face_detector &dlib_detector, const cv::Mat &color_frame, cv::Mat &color_display_frame);
 
 }
