@@ -24,6 +24,8 @@ IGNORE_WARNINGS_PUSH
 #include <libfreenect2/threading.h>
 #include <libfreenect2/registration.h>
 
+#include <dlib/opencv.h>
+#include <dlib/image_processing/frontal_face_detector.h>
 
 IGNORE_WARNINGS_POP
 
@@ -133,6 +135,8 @@ void create_cloud(const cv::Mat &color, const cv::Mat &depth, const float scale,
 
 int particle_filter()
 {
+#define VIOLA
+#ifdef VIOLA
     //Cascades initialization
     //string face_cascade_name = "../cascades/lbpcascade_frontalface.xml";
     string face_cascade_name = "../cascades/haarcascade_frontalface_default.xml";
@@ -161,9 +165,16 @@ int particle_filter()
         printf("--(!)Error loading %s\n", eyes_cascade_name.c_str());
         return -1;
     }
+#endif
 
-    //Kinect2Camera video_feed;
-    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
+//#define DLIB
+#ifdef DLIB
+    dlib::frontal_face_detector face_detector = dlib::get_frontal_face_detector();
+#endif
+
+
+    Kinect2Camera video_feed;
+    //Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
     
     char *calib_dir = getenv("HOME");
     const std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
@@ -358,16 +369,50 @@ int particle_filter()
         std::vector<cv::Vec3f> circles;
 
         uint64_t viola_t0 = cv::getTickCount();
-        
+        std::vector<cv::Rect> faces_roi;
+#ifdef VIOLA
         cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
-        std::vector<viola_faces::face> caras = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
+        std::vector<viola_faces::face> faces = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
+        for (auto &face : faces){
+            faces_roi.push_back(cv::Rect(face.first.x, face.first.y, face.first.width, face.first.height));
+            //circles.push_back(cv::Vec3f(face.first.x + face.first.width / 2, face.first.y + face.first.height / 2, face.first.width / 2));
+        }
+#endif
 
+/*
+#ifdef DLIB
+        cv::Mat color_frame_upper_half = color_frame(cv::Rect(0, 0, color_frame.cols, color_frame.rows * 0.75));
+        dlib::cv_image<dlib::bgr_pixel> dlib_img(color_frame);
+        std::vector<dlib::rectangle> faces = face_detector(dlib_img);
+        for (auto &face : faces){
+            circles.push_back(cv::Vec3f(face.left() + (face.right() - face.left()) / 2, face.top() + (face.bottom() - face.top()) / 2, (face.right() - face.left()) / 2));
+        }
+#endif
+*/
+
+#ifdef DLIB
+        for (auto &roi : faces_roi){
+            const int x = std::max(0, int(roi.x - roi.width / 4));
+            const int y = std::max(0, int(roi.y - roi.height / 4));
+            
+            const int width = std::min(int(roi.width * 1.5), color_frame.cols - 1 - roi.x);
+            const int height = std::min(int(roi.height * 1.5), color_frame.rows - 1 - roi.y);
+            const cv::Rect extended_roi = cv::Rect(x, y, width, height);
+
+            dlib::cv_image<dlib::bgr_pixel> dlib_img(color_frame(extended_roi));
+            std::vector<dlib::rectangle> faces = face_detector(dlib_img);
+            
+            if(faces.empty()){
+                continue;
+            }
+
+            circles.push_back(cv::Vec3f(roi.x + roi.width / 2, roi.y + roi.height / 2, roi.width / 2));
+        }
+#endif
         float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
+
         //std::cout << "TIMES_VIOLA " << viola_t << std::endl;
         
-        for (auto &cara : caras){
-            circles.push_back(cv::Vec3f(cara.first.x + cara.first.width / 2, cara.first.y + cara.first.height / 2, cara.first.width / 2));
-        }
         if (circles.size() != 0) {
             int circle_max = 0;
             double radius_max = circles[0][2];
@@ -406,9 +451,19 @@ int particle_filter()
 #define VISUALIZATION
 #ifdef VISUALIZATION
         uint64_t visualization_t0 = cv::getTickCount();
-        
-        viola_faces::print_faces(caras, color_display_frame, 1, 1);
-        
+
+#ifdef VIOLA
+        viola_faces::print_faces(faces, color_display_frame, 1, 1);
+#endif
+
+#ifdef DLIB
+        for (auto &face : faces){
+            const cv::Point p0(face.left(), face.top());
+            const cv::Point p1(face.right(), face.bottom());
+            cv::rectangle(color_display_frame, p0, p1, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
+        }
+#endif
+
         for (auto circle : circles){
             cv::Point center(cvRound(circle[0]), cvRound(circle[1]));
             const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(center.y), cvRound(center.x));
@@ -514,19 +569,19 @@ int particle_filter()
         }
 
         //visualization
-        cv::Mat depthDisp;
-        dispDepth(registered_depth, depthDisp, 12000.0f);
-        cv::Mat combined;
-        combine(color_mat, depthDisp, combined);
+        //cv::Mat depthDisp;
+        //dispDepth(registered_depth, depthDisp, 12000.0f);
+        //cv::Mat combined;
+        //combine(color_mat, depthDisp, combined);
         //int a = 140;
         //int b = 290;
         //cv::Mat combined2 = combined(cv::Rect(a, 0, combined.cols - a - b, combined.rows));
         //cv::line(combined, cv::Point(color_display_frame.cols * 0.5, 0), cv::Point(color_display_frame.cols * 0.5, color_display_frame.rows - 1), cv::Scalar(0, 0, 255));
         //cv::line(combined, cv::Point(0, color_display_frame.rows * 0.5), cv::Point(color_display_frame.cols - 1, color_display_frame.rows * 0.5), cv::Scalar(0, 255, 0));
 
-        CImage registered_depth_image;
-        registered_depth_image.loadFromIplImage(new IplImage(combined));
-        registered_color_window.showImage(registered_depth_image);
+        //CImage registered_depth_image;
+        //registered_depth_image.loadFromIplImage(new IplImage(combined));
+        //registered_color_window.showImage(registered_depth_image);
 
         CImage gradient_magnitude_image;
         imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(gradient_magnitude_scaled)));

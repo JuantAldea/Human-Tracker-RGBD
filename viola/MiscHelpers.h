@@ -83,7 +83,6 @@ static const cv::Scalar GlobalColorPalette[] = {
     cv::Scalar(160, 164, 160),
     cv::Scalar(192, 192, 192)
 };
-/*
 
 enum class GlobalColorNames  {
     RED = 0,
@@ -104,7 +103,6 @@ enum class GlobalColorNames  {
     LIGHT_GRAY_1,
     LIGHT_GRAY_2,
 };
-*/
 
 inline bool rect_fits_in_rect(const cv::Rect &smaller, const cv::Rect &bigger)
 {

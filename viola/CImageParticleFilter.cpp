@@ -521,7 +521,7 @@ void CImageParticleFilter<DEPTH_TYPE>::init_particles(const size_t n_particles, 
         it->d->vy = v_y.first + v_y.second * randomGenerator.drawGaussian1D_normalized();
         it->d->vz = v_z.first + v_z.second * randomGenerator.drawGaussian1D_normalized();
         
-        printf("INIT: %f %f %f\n", it->d->x, it->d->y, it->d->z);
+        //printf("INIT: %f %f %f\n", it->d->x, it->d->y, it->d->z);
         
         it->log_w = 0;
     }

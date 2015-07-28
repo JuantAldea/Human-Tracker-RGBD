@@ -137,7 +137,7 @@ struct MultiTracker {
                                   make_pair(estimated_state.y, estimated_state.radius_y * 2),
                                   make_pair(float(estimated_state.z), 100.f),
                                   make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
-                printf("INIT STD %f %d %d\n", particles.missing_uncertaincy_multipler, estimated_state.radius_x, estimated_state.radius_y);
+                //printf("INIT STD %f %d %d\n", particles.missing_uncertaincy_multipler, estimated_state.radius_x, estimated_state.radius_y);
             }
         }
     };
