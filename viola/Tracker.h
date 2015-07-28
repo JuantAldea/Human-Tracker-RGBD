@@ -35,7 +35,7 @@ bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &h
     float non_zero = cv::countNonZero(depth_roi_masked);
     cv::Scalar sum = cv::sum(depth_roi_masked);
     state.average_z = sum[0] / non_zero;
-    
+
     /*
     {
         //TODO WTF?
@@ -62,7 +62,7 @@ bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &h
 
     //CHEST
     const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, center_depth);
-    
+
     Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
                                    reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
@@ -77,7 +77,7 @@ bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &h
     particles.init_particles(NUM_PARTICLES, make_pair(state.x, state.radius_x), make_pair(state.y, state.radius_y),
                              make_pair(float(state.z), 100.f),
                              make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
-    
+
     return true;
 };
 
@@ -97,7 +97,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
                        EllipseStash &ellipses, const ImageRegistration &reg)
 {
     particles.get_mean(new_state.x, new_state.y, new_state.z, new_state.v_x, new_state.v_y, new_state.v_z);
-    printf("RADIUS STATE: %f %f %f\n", new_state.x, new_state.y, new_state.z);
+    //printf("RADIUS STATE: %f %f %f\n", new_state.x, new_state.y, new_state.z);
     Eigen::Vector2i top_corner, bottom_corner;
     const double center_measured_depth = depth_frame.at<DEPTH_TYPE>(cvRound(new_state.y),
                                          cvRound(new_state.x));
@@ -106,7 +106,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 
 
     const cv::Size projection_size = ellipses.get_ellipse_size(BodyPart::HEAD, z);
-    printf("RADIUS Z -> %d %d %f %f %f\n", projection_size.width, projection_size.height, z, center_measured_depth, old_state.z);
+    //printf("RADIUS Z -> %d %d %f %f %f\n", projection_size.width, projection_size.height, z, center_measured_depth, old_state.z);
     new_state.radius_x = (projection_size.width * 0.5);
     new_state.radius_y = (projection_size.height * 0.5);
     new_state.center = cv::Point(new_state.x, new_state.y);
@@ -132,7 +132,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 
     //if the chest is not visible the old model is kept.
     new_state.torso_color_model = old_state.torso_color_model;
-    
+
     if (!rect_fits_in_frame(torso_rect, hsv_frame)) {
         return;
     }
@@ -154,7 +154,7 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
 
     new_state.score_color = 1 - cv::compareHist(new_state.color_model, state.color_model,
                             CV_COMP_BHATTACHARYYA);
-    
+
     new_state.score_shape = ellipse_contour_test(new_state.center, new_state.radius_x, new_state.radius_y,
                             shape_model, gradient_vectors, cv::Mat(), nullptr);
 
@@ -162,8 +162,8 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
                                   CV_COMP_BHATTACHARYYA);
 
     new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z)) - 1);
-    
+
     //TODO UPDATE WITH DEPTH AND TORSO?
     new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score * new_state.score_z;
-    printf("%f · %f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_z, new_state.score_total);
+    //printf("SCORE: %f · %f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_z, new_state.score_total);
 }

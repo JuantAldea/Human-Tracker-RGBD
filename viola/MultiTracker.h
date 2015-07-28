@@ -9,7 +9,7 @@ template <typename DEPTH_TYPE>
 struct MultiTracker {
     const ImageRegistration *reg;
     const boost::math::normal_distribution<float> depth_distribution;
-    
+
     std::vector<CImageParticleFilter<DEPTH_TYPE>> trackers;
     std::vector<StateEstimation> states;
     std::vector<StateEstimation> new_states;
@@ -74,7 +74,7 @@ struct MultiTracker {
                                                ellipse_axes.width, ellipse_axes.height);
 
         const bool torso_in_frame = rect_fits_in_frame(torso_roi, hsv_frame);
-        
+
         if (!torso_in_frame){
             return;
         }
@@ -98,12 +98,12 @@ struct MultiTracker {
             const StateEstimation &estimated_state = states[i];
             static CParticleFilter::TParticleFilterStats stats;
             do_tracking(PF, particles, observation, stats);
-            printf("RADIUS0 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
+            //printf("RADIUS0 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
                 depth_frame, ellipses, reg);
-            
+
             score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution);
-            printf("RADIUS1 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
+            //printf("RADIUS1 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             particles.last_time = cv::getTickCount();
         }
     };
@@ -116,7 +116,7 @@ struct MultiTracker {
             StateEstimation &estimated_new_state = new_states[i];
             StateEstimation &estimated_state = states[i];
             const float score = estimated_new_state.score_total;
-            printf("RADIUS2 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
+            //printf("RADIUS2 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             if (score > LIKEHOOD_FOUND) {
                 estimated_state.blend(estimated_new_state);
                 particles.set_head_color_model(estimated_state.color_model);
@@ -236,15 +236,15 @@ struct MultiTracker {
             {
                 std::ostringstream oss;
                 std::ostringstream oss2;
-                
+
                 oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape
                     << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score
                     << ' ' << estimated_state.score_z << ' ' << trackers[i].transition_model_std_xy;
-                
+
                 oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape
                      << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score
                      << ' ' << estimated_new_state.score_z;
-                
+
                 int fontFace =  cv::FONT_HERSHEY_PLAIN;
                 double fontScale = 1;
                 int thickness = 2;
