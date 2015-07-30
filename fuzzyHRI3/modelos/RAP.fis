@@ -1,0 +1,46 @@
+[System]
+Name='RAP'
+Type='mamdani'
+Version=2.0
+NumInputs=2
+NumOutputs=1
+NumRules=6
+AndMethod='min'
+OrMethod='max'
+ImpMethod='min'
+AggMethod='max'
+DefuzzMethod='centroid'
+
+[Input1]
+Name='RaisedArm'
+Range=[0 200]
+NumMFs=3
+MF1='Zero':'trimf',[-80 0 80]
+MF2='One':'trimf',[20 100 180]
+MF3='Two':'trimf',[120 200 280]
+
+[Input2]
+Name='ExtendedArm'
+Range=[0 200]
+NumMFs=3
+MF1='Zero':'trimf',[-80 0 80]
+MF2='One':'trimf',[20 100 180]
+MF3='Two':'trimf',[120 200 280]
+
+[Output1]
+Name='RAP'
+Range=[0 1]
+NumMFs=5
+MF1='VeryLittle':'trimf',[-0.25 0 0.25]
+MF2='Medium':'trimf',[0.25 0.5 0.75]
+MF3='VeryMuch':'trimf',[0.75 1 1.25]
+MF4='Much':'trimf',[0.5 0.75 1]
+MF5='Little':'trimf',[0 0.25 0.5]
+
+[Rules]
+1 1, 1 (1) : 1
+1 2, 5 (1) : 1
+1 3, 2 (1) : 1
+2 1, 2 (1) : 1
+2 2, 2 (1) : 1
+3 1, 4 (1) : 1
