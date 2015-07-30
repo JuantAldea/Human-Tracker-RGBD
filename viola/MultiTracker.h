@@ -24,6 +24,11 @@ struct MultiTracker {
         ;
     };
 
+    size_t number_of_trackers() const
+    {
+        return trackers.size();
+    };
+
     void insert_tracker(const cv::Point &center, const float center_depth,
                         const cv::Mat &hsv_frame, const cv::Mat &depth_frame, EllipseStash &ellipses)
     {
@@ -167,6 +172,15 @@ struct MultiTracker {
         new_states.shrink_to_fit();
         states.shrink_to_fit();
         return deleted_states;
+    }
+
+    void tracking_step(const cv::Mat &hsv_frame, const cv::Mat &depth_frame, const cv::Mat &gradient_vectors,
+            const CSensoryFrame &observation, CParticleFilter &PF, EllipseStash &ellipses, const ImageRegistration &reg)
+    {
+
+        tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses, reg);
+        update(ellipses);
+        delete_missing();
     }
 
     void show(cv::Mat &color_display_frame, const cv::Mat &depth_frame) const

@@ -377,47 +377,6 @@ int particle_filter()
             circles.push_back(cv::Vec3f(roi.x + roi.width / 2, roi.y + roi.height / 2, roi.width / 2));
         }
 
-/*
-#ifdef VIOLA
-        cv::ocl::oclMat ocl_gray_frame_upper_half = ocl_gray_frame(cv::Rect(0, 0, ocl_gray_frame.cols, ocl_gray_frame.rows * 0.75));
-        std::vector<viola_faces::face> faces = viola_faces::detect_faces(ocl_gray_frame_upper_half, ocl_face_cascade, ocl_eyes_cascade, 1);
-        for (auto &face : faces){
-            faces_roi.push_back(cv::Rect(face.first.x, face.first.y, face.first.width, face.first.height));
-            //circles.push_back(cv::Vec3f(face.first.x + face.first.width / 2, face.first.y + face.first.height / 2, face.first.width / 2));
-        }
-#endif
-*/
-/*
-#ifdef DLIB
-        cv::Mat color_frame_upper_half = color_frame(cv::Rect(0, 0, color_frame.cols, color_frame.rows * 0.75));
-        dlib::cv_image<dlib::bgr_pixel> dlib_img(color_frame);
-        std::vector<dlib::rectangle> faces = face_detector(dlib_img);
-        for (auto &face : faces){
-            circles.push_back(cv::Vec3f(face.left() + (face.right() - face.left()) / 2, face.top() + (face.bottom() - face.top()) / 2, (face.right() - face.left()) / 2));
-        }
-#endif
-*/
-/*
-#ifdef DLIB
-        for (auto &roi : faces_roi){
-            const int x = std::max(0, int(roi.x - roi.width / 4));
-            const int y = std::max(0, int(roi.y - roi.height / 4));
-
-            const int width = std::min(int(roi.width * 1.5), color_frame.cols - 1 - roi.x);
-            const int height = std::min(int(roi.height * 1.5), color_frame.rows - 1 - roi.y);
-            const cv::Rect extended_roi = cv::Rect(x, y, width, height);
-
-            dlib::cv_image<dlib::bgr_pixel> dlib_img(color_frame(extended_roi));
-            std::vector<dlib::rectangle> faces = face_detector(dlib_img);
-
-            if(faces.empty()){
-                continue;
-            }
-
-            circles.push_back(cv::Vec3f(roi.x + roi.width / 2, roi.y + roi.height / 2, roi.width / 2));
-        }
-#endif
-*/
         float viola_t = (cv::getTickCount() - viola_t0) / double(cv::getTickFrequency());
 
         //std::cout << "TIMES_VIOLA " << viola_t << std::endl;
@@ -450,36 +409,16 @@ int particle_filter()
         }
 
         uint64_t tracking_t0 = cv::getTickCount();
-        trackers.tracking(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses, reg);
-        trackers.update(ellipses);
-        trackers.delete_missing();
+
+        trackers.tracking_step(hsv_frame, depth_frame, gradient_vectors, observation, PF, ellipses, reg);
 
         float tracking_t = (cv::getTickCount() - tracking_t0) / double(cv::getTickFrequency());
+
         //std::cout << "TIMES_TRACKING " << tracking_t << std::endl;
 
 #define VISUALIZATION
 #ifdef VISUALIZATION
         uint64_t visualization_t0 = cv::getTickCount();
-
-        for (auto &face : faces_roi){
-            //cv::rectangle(color_display_frame, face, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
-        }
-/*
-#ifdef VIOLA
-        viola_faces::print_faces(faces, color_display_frame, 1, 1);
-#endif
-
-#ifdef DLIB
-#ifndef VIOLA
-        for (auto &face : faces){
-            const cv::Point p0(face.left(), face.top());
-            const cv::Point p1(face.right(), face.bottom());
-            cv::rectangle(color_display_frame, p0, p1, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
-            //cv::rectangle(color_display_frame, face.first, GlobalColorPalette[(int)GlobalColorNames::DARK_YELLOW]);
-        }
-#endif
-#endif
-*/
 
         for (auto circle : circles){
             cv::Point center(cvRound(circle[0]), cvRound(circle[1]));
