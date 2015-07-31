@@ -299,10 +299,10 @@ int particle_filter()
         depth_frame = registered_depth;
         color_display_frame = color_frame.clone();
 
-        uint64_t color_conversion_t0 = cv::getTickCount();
 
 #define OCL_CONVERSION
 #ifdef OCL_CONVERSION
+        uint64_t color_conversion_t0 = cv::getTickCount();
         cv::ocl::oclMat ocl_hsv_frame;
         cv::ocl::oclMat ocl_color_frame(color_frame);
         cv::ocl::cvtColor(ocl_color_frame, ocl_hsv_frame, cv::COLOR_BGR2HSV);
@@ -310,26 +310,34 @@ int particle_filter()
         cv::ocl::cvtColor(ocl_color_frame, ocl_gray_frame, cv::COLOR_BGR2GRAY);
 
         cv::Mat hsv_frame = ocl_hsv_frame;
-        cv::Mat gray_frame = ocl_gray_frame;
+        //cv::Mat gray_frame = ocl_gray_frame;
+        float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
+        
+        uint64_t sobel_t0 = cv::getTickCount();
+        
+        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
+        std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(ocl_gray_frame);
+        float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
 #else
+        uint64_t color_conversion_t0 = cv::getTickCount();
+        
         cv::Mat hsv_frame;
         cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
         cv::Mat gray_frame;
         cvtColor(color_frame, gray_frame, CV_RGB2GRAY);
-#endif
+        
         float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
-        //std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
-
-        //cv::Mat hsv_frame;
-        //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
 
         uint64_t sobel_t0 = cv::getTickCount();
-
-        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
+        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled; 
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(gray_frame);
 
         float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
-
+#endif
+        //std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
+        //cv::Mat hsv_frame;
+        //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
+        
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
         CObservationImagePtr obsImage_depth = CObservationImage::Create();

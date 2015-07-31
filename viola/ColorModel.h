@@ -183,7 +183,8 @@ cv::Mat histogram_to_image(const cv::Mat &histogram, const int scale)
 
 
 
-std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
+//std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
+std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::ocl::oclMat &image)
 {
 #define OPENCL_OCL
 #ifdef OPENCL_OCL
@@ -196,7 +197,8 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> sobel_operator(const cv::Mat &image)
     
     int64_t t0 = cv::getTickCount();
 
-    TYPE_MAT orig(image);
+    //TYPE_MAT orig(image);
+    TYPE_MAT orig = image;
     TYPE_MAT image_gray;
     
     int64_t t1 = cv::getTickCount();
