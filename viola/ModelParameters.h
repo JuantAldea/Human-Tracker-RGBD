@@ -40,6 +40,6 @@ constexpr float MODEL_AXIS_Y_METTERS = PERSON_HEAD_Y_AXIS_METTERS;
 constexpr float MODEL_SEMIAXIS_X_METTERS = MODEL_AXIS_X_METTERS * 0.5;
 constexpr float MODEL_SEMIAXIS_Y_METTERS = MODEL_AXIS_Y_METTERS * 0.5;
 
-constexpr float DEPTH_SIGMA = 400; //mm
+constexpr float DEPTH_SIGMA = 1000; //mm
 
 using DEPTH_TYPE = uint16_t;
