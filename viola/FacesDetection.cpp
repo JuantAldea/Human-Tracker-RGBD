@@ -6,6 +6,23 @@ using namespace cv;
 namespace viola_faces
 {
 
+
+inline cv::Rect clamp_rect_to_frame(const cv::Rect &r, const cv::Mat &f)
+{
+    const int x_0 = r.x;
+    const int y_0 = r.y;
+
+    const int x_1 = r.x + r.width - 1;
+    const int y_1 = r.y + r.height - 1;
+
+    const int clamped_x0 = std::max(0, x_0);
+    const int clamped_y0 = std::max(0, y_0);
+    const int clamped_x1 = std::min(f.cols - 1, x_1);
+    const int clamped_y1 = std::min(f.rows - 1, y_1);
+    return cv::Rect(clamped_x0, clamped_y0, clamped_x1 - clamped_x0, clamped_y1 - clamped_y0);
+}
+
+
 void print_faces(const faces &detected_faces, Mat &frame, float scale_width, float scale_height)
 {
     for (auto detected_face : detected_faces) {
@@ -88,8 +105,8 @@ std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::oc
         const cv::Rect face_rect_extended = cv::Rect(face_rect.x - cvRound(face_rect.width * 0.25), face.first.y -  cvRound(face_rect.height * 0.25),
             cvRound(face_rect.width * 1.50),  cvRound(face_rect.height * 1.50));
 
-        //const cv::Rect face_rect_clamped = clamp_rect_to_frame(face_rect_extended, color_frame);
-        cv::Rect face_rect_clamped = face_rect_extended;
+        const cv::Rect face_rect_clamped = clamp_rect_to_frame(face_rect_extended, color_frame);
+        //cv::Rect face_rect_clamped = face_rect_extended;
 
         std::cout << face_rect << std::endl;
         std::cout << face_rect_extended << std::endl;
@@ -111,12 +128,12 @@ std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::oc
 
         const cv::Rect rect_dlib_face_global = cv::Rect(face_rect_clamped.x + rect_dlib_face_local.x, face_rect_clamped.y + rect_dlib_face_local.y,
             rect_dlib_face_local.width, rect_dlib_face_local.height);
-
+        
+        cv::rectangle(color_display_frame, rect_dlib_face_global, cv::Scalar(0, 0, 255), 8);
         std::cout << " DLIB " << rect_dlib_face_global << std::endl;
         //confirmed_faces.push_back(rect_dlib_face_global);
 
         confirmed_faces.push_back(face_rect);
-        cv::rectangle(color_display_frame, rect_dlib_face_global, cv::Scalar(0, 0, 255), 4);
     }
 
     return confirmed_faces;
