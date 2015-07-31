@@ -74,6 +74,12 @@ void CImageParticleFilter<DEPTH_TYPE>::set_object_found()
 }
 
 template<typename DEPTH_TYPE>
+bool CImageParticleFilter<DEPTH_TYPE>::get_object_found()
+{
+    return object_found;
+}
+
+template<typename DEPTH_TYPE>
 void CImageParticleFilter<DEPTH_TYPE>::set_object_missing()
 {
     object_found = false;

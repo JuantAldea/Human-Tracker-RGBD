@@ -142,7 +142,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 }
 
 void score_visual_model(const StateEstimation &state, StateEstimation &new_state, const cv::Mat &gradient_vectors,
-                        const std::vector<Eigen::Vector2f> &shape_model, const boost::math::normal_distribution<float> &depth_normal_distribution)
+                        const std::vector<Eigen::Vector2f> &shape_model, const boost::math::normal_distribution<float> &depth_normal_distribution, const bool object_found)
 {
     if (new_state.color_model.empty()) {
         new_state.score_total = -1;
@@ -163,7 +163,7 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
 
     new_state.score_z = 1 - (2 * cdf(depth_normal_distribution, std::abs(state.z - new_state.z)) - 1);
 
-    //TODO UPDATE WITH DEPTH AND TORSO?
+    //const float score_z = object_found * new_state.score_z + !object_found * std::max(1.0, new_state.score_z * 1.25);
     new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score * new_state.score_z;
     //printf("SCORE: %f · %f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_z, new_state.score_total);
 }

@@ -95,6 +95,7 @@ public:
 
     void set_object_missing();
     void set_object_found();
+    bool get_object_found();
 
 
     void set_head_color_model(const cv::Mat &model);

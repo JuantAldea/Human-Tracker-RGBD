@@ -107,7 +107,7 @@ struct MultiTracker {
             build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
                 depth_frame, ellipses, reg);
 
-            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution);
+            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution, particles.get_object_found());
             //printf("RADIUS1 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             particles.last_time = cv::getTickCount();
         }
