@@ -173,8 +173,8 @@ int particle_filter()
 #endif
 
 
-    Kinect2Camera video_feed;
-    //Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
+    //Kinect2Camera video_feed;
+    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/run/media/juen/1cf91ca4-036c-44f3-a9b8-35deb7ced99c/videos/video3/video0"), std::string("avi"));
 
     char *calib_dir = getenv("HOME");
     const std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
@@ -191,7 +191,7 @@ int particle_filter()
     cv::Mat depth_frame;
 
     CDisplayWindow image("image");
-    CDisplayWindow registered_color_window("registered_depth_color");
+    //CDisplayWindow registered_color_window("registered_depth_color");
     CDisplayWindow gradient_color_window("gradient_color_window");
 
     //CDisplayWindow model_candidate_window("model_candidate_window");
@@ -205,11 +205,11 @@ int particle_filter()
     //CDisplayWindow model_histogram_window2("2model_histogram_window");
     //CDisplayWindow model_candidate_histogram_window2("2model_candidate_histogram_window");
 
-     CDisplayWindow image_hist_chest_color_score_window ("chest_color_score_window");
-     CDisplayWindow image_hist_head_color_score_window ("head_color_score_window");
-     CDisplayWindow image_hist_head_fitting_score_window ("head_fitting_score_window");
-     CDisplayWindow image_hist_head_z_score_window ("head_z_score_window");
-     CDisplayWindow image_hist_score_window ("score_window");
+     //CDisplayWindow image_hist_chest_color_score_window ("chest_color_score_window");
+     //CDisplayWindow image_hist_head_color_score_window ("head_color_score_window");
+     //CDisplayWindow image_hist_head_fitting_score_window ("head_fitting_score_window");
+     //CDisplayWindow image_hist_head_z_score_window ("head_z_score_window");
+     //CDisplayWindow image_hist_score_window ("score_window");
 
 //#define VIEW_3D
 #ifdef VIEW_3D
@@ -312,24 +312,24 @@ int particle_filter()
         cv::Mat hsv_frame = ocl_hsv_frame;
         //cv::Mat gray_frame = ocl_gray_frame;
         float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
-        
+
         uint64_t sobel_t0 = cv::getTickCount();
-        
+
         cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(ocl_gray_frame);
         float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
 #else
         uint64_t color_conversion_t0 = cv::getTickCount();
-        
+
         cv::Mat hsv_frame;
         cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
         cv::Mat gray_frame;
         cvtColor(color_frame, gray_frame, CV_RGB2GRAY);
-        
+
         float color_conversion_t = (cv::getTickCount() - color_conversion_t0) / double(cv::getTickFrequency());
 
         uint64_t sobel_t0 = cv::getTickCount();
-        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled; 
+        cv::Mat gradient_vectors, gradient_magnitude, gradient_magnitude_scaled;
         std::tie(gradient_vectors, gradient_magnitude, gradient_magnitude_scaled) = sobel_operator(gray_frame);
 
         float sobel_t = (cv::getTickCount() - sobel_t0) / double(cv::getTickFrequency());
@@ -337,7 +337,7 @@ int particle_filter()
         //std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
         //cv::Mat hsv_frame;
         //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
-        
+
         CObservationImagePtr obsImage_color = CObservationImage::Create();
         CObservationImagePtr obsImage_hsv = CObservationImage::Create();
         CObservationImagePtr obsImage_depth = CObservationImage::Create();
@@ -434,6 +434,7 @@ int particle_filter()
             if (center_depth == 0){
                 continue;
             }
+
             Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR, reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
             const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
@@ -444,10 +445,28 @@ int particle_filter()
             const bool valid = rect_fits_in_frame(torso_roi, hsv_frame);
             const cv::Scalar color = valid ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 0, 255);
             cv::ellipse(color_display_frame, cv::Point(torso_center[0], torso_center[1]), cv::Size(ellipse_axes.width * 0.5, ellipse_axes.height * 0.5), 0, 0, 360, color, -3, 8, 0);
+        }
 
+        for(auto &state : trackers.states) {
+            const DEPTH_TYPE center_depth = depth_frame.at<DEPTH_TYPE>(cvRound(state.center.y), cvRound(state.center.x));
+            if (center_depth == 0){
+                continue;
+            }
+
+            Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(state.center.x, state.center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR, reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+
+            const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
+            const cv::Rect torso_roi = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
+                                                   cvRound(torso_center[1] - ellipse_axes.height * 0.5f),
+                                                   ellipse_axes.width, ellipse_axes.height);
+
+            const bool valid = rect_fits_in_frame(torso_roi, hsv_frame);
+            const cv::Scalar color = valid ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 0, 255);
+            cv::ellipse(color_display_frame, cv::Point(torso_center[0], torso_center[1]), cv::Size(ellipse_axes.width * 0.5, ellipse_axes.height * 0.5), 0, 0, 360, color, -3, 8, 0);
         }
 
         trackers.show(color_display_frame, depth_frame);
+        trackers.show(gradient_magnitude_scaled, depth_frame);
 
         std::vector<std::unique_ptr<IplImage>> imp_image_pointers;
 
