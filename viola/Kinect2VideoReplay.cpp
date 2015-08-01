@@ -8,15 +8,15 @@
 using namespace cv;
 using namespace std;
 
-int main()
+int main(int argc, char *argv[])
 {
-    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string("/media/juant/VIDEOS/video/video0"), std::string("avi"));
-    VideoCapture color ("/media/juant/VIDEOS/video/video0_color.avi");
+    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string(argv[1]), std::string("avi"));
+    VideoCapture color (string(argv[1]) + string("_color.avi"));
     double t0 = cv::getTickCount();
     while(true){
         Mat frame;
-        cout << color.get(CV_CAP_PROP_POS_MSEC) << endl;
-        cout << color.get(CV_CAP_PROP_POS_FRAMES) << endl;
+        //cout << color.get(CV_CAP_PROP_POS_MSEC) << endl;
+        //cout << color.get(CV_CAP_PROP_POS_FRAMES) << endl;
         cv::Mat rgb, depth;
         video_feed.grab(rgb, depth);
         //color >> frame;
