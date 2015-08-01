@@ -12,7 +12,7 @@ public:
     Kinect2VideoReader(const string &serial_number, const string &file_base_name, const string &file_extension);
     void skip_n_frames(const size_t n);
     void skip_n_seconds(const double n);
-    
+
     void close();
 
     void grab(cv::Mat &color, cv::Mat &depth);
@@ -26,7 +26,7 @@ protected:
     float inv_framerate;
     cv::Mat current_rgb, current_depth;
     void update_frames();
-    
+
     void get_depth_frame(cv::Mat &frame);
     void get_rgb_frame(cv::Mat &frame);
 };
@@ -66,7 +66,7 @@ void Kinect2VideoReader::skip_n_seconds(const double n)
 
     const double current_ms_time = rgb.get(CV_CAP_PROP_POS_MSEC);
     const double next_ms_time = current_ms_time + n * 1000;
-    
+
     const double next_frame11 = rgb.get(CV_CAP_PROP_POS_FRAMES);
     const double next_frame22 = depth_1_3.get(CV_CAP_PROP_POS_FRAMES);
     const double next_frame33 = depth_4.get(CV_CAP_PROP_POS_FRAMES);
@@ -74,7 +74,7 @@ void Kinect2VideoReader::skip_n_seconds(const double n)
     rgb.set(CV_CAP_PROP_POS_MSEC, next_ms_time);
     depth_1_3.set(CV_CAP_PROP_POS_MSEC, next_ms_time);
     depth_4.set(CV_CAP_PROP_POS_MSEC, next_ms_time);
-    
+
     const double next_frame1 = rgb.get(CV_CAP_PROP_POS_FRAMES);
     const double next_frame2 = depth_1_3.get(CV_CAP_PROP_POS_FRAMES);
     const double next_frame3 = depth_4.get(CV_CAP_PROP_POS_FRAMES);
@@ -92,14 +92,14 @@ void Kinect2VideoReader::get_rgb_frame(cv::Mat &frame)
 }
 
 void Kinect2VideoReader::get_depth_frame(cv::Mat &depthf)
-{   
+{
     cv::Mat depth3;
     cv::Mat depth4;
-    
+
     depth_1_3 >> depth3;
     depth_4 >> depth4;
 
-    
+
     depthf = cv::Mat::zeros(depth3.rows, depth3.cols, CV_32FC1);
 
     size_t n_bytes = depth3.rows * depth3.cols;
@@ -125,22 +125,24 @@ void Kinect2VideoReader::grab_copy(cv::Mat &color, cv::Mat &depth)
 }
 
 void Kinect2VideoReader::grab(cv::Mat &color, cv::Mat &depth)
-{   
+{
     t1 = cv::getTickCount();
-    
+
     if (!opened){
         t0 = t1;
         opened = true;
         update_frames();
     }
-    
+
     const double dt = (t1 - t0) / cv::getTickFrequency();
-    
-    if (dt > 1/17.0){
+    //skip_n_seconds(dt);
+    std::cout << dt << std::endl;
+    if (dt >= inv_framerate){
         update_frames();
         t0 = t1;
     }
-    
+
     color = current_rgb;
     depth = current_depth;
 }
+
