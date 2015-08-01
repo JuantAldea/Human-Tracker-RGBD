@@ -128,7 +128,7 @@ std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::oc
 
         const cv::Rect rect_dlib_face_global = cv::Rect(face_rect_clamped.x + rect_dlib_face_local.x, face_rect_clamped.y + rect_dlib_face_local.y,
             rect_dlib_face_local.width, rect_dlib_face_local.height);
-        
+
         cv::rectangle(color_display_frame, rect_dlib_face_global, cv::Scalar(0, 0, 255), 8);
         std::cout << " DLIB " << rect_dlib_face_global << std::endl;
         //confirmed_faces.push_back(rect_dlib_face_global);
@@ -160,7 +160,7 @@ faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifi
     std::vector<Rect> faces;
     //face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
     face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.2, 5, 0 | CV_HAAR_SCALE_IMAGE, Size(28, 48), Size(354, 590));
-    std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
+    //std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
     for (auto detected_face : faces) {
         cv::ocl::oclMat faceROI = ocl_frame_gray(detected_face);
         std::vector<Rect> eyes;
