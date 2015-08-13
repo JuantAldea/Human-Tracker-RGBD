@@ -5,6 +5,7 @@
 #include "project_config.h"
 
 IGNORE_WARNINGS_PUSH
+
 #include <dlib/opencv.h>
 #include <dlib/image_processing/frontal_face_detector.h>
 #include <mrpt/otherlibs/do_opencv_includes.h>
