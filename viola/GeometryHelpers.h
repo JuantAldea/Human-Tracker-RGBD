@@ -33,6 +33,9 @@ std::vector<Vector3f> points_3D_reprojection(const std::vector<Vector2f> &points
 template<typename DEPTH_DATA_TYPE>
 cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy);
 
+template<typename DEPTH_TYPE>
+cv::Mat depth_3D_reprojection(const cv::Mat &depth, const cv::Mat &cameraMatrix);
+
 template<typename DEPTH_DATA_TYPE>
 inline std::tuple<Vector2i, Vector2i> project_model(const Vector2f &model_center, const cv::Mat &depth, const Vector2f &model_semi_axes,
     const cv::Mat &cameraMatrix, const cv::Mat &lookupX, const cv::Mat &lookupY);
@@ -115,6 +118,16 @@ inline std::vector<Vector3f> pixel_depth_to_3D_coordiantes(const std::vector<Vec
 }
 
 template<typename DEPTH_TYPE>
+cv::Mat depth_3D_reprojection(const cv::Mat &depth, const cv::Mat &cameraMatrix)
+{
+    const float inv_fx = 1.0f / cameraMatrix.at<double>(0, 0);
+    const float inv_fy = 1.0f / cameraMatrix.at<double>(1, 1);
+    const float cx = cameraMatrix.at<double>(0, 2);
+    const float cy = cameraMatrix.at<double>(1, 2);
+    return depth_3D_reprojection<DEPTH_TYPE>(depth, inv_fx, inv_fy, cx, cy);
+}
+
+template<typename DEPTH_TYPE>
 cv::Mat depth_3D_reprojection(const cv::Mat &depth, const float inv_fx, const float inv_fy, const float cx, const float cy)
 {
     cv::Mat reprojection = cv::Mat(depth.size(), depth.type());
@@ -174,7 +187,6 @@ inline Vector3f point_3D_reprojection (const Vector2f &v, const float depth, con
 {
     return point_3D_reprojection(v[0], v[1], depth, lookupX, lookupY);
 }
-
 
 template<typename DEPTH_TYPE>
 inline Vector3f point_3D_reprojection(const Vector2f &v, const cv::Mat &depth, const cv::Mat &lookupX, const cv::Mat &lookupY)
@@ -305,7 +317,7 @@ Vector2i project_vector(const Vector2f &origin, const float depth, const Vector3
 
 Vector2i translate_2D_vector_in_3D_space(const int x, const int y, const float depth, const Vector3f &translation,
     const float fx, const float fy, const float cx, const float cy, const cv::Mat &lookupX, const cv::Mat &lookupY)
-{    
+{
     const Eigen::Vector3f point_3D = point_3D_reprojection(x, y, depth, lookupX, lookupY);
     const Eigen::Vector3f point_3D_translated = point_3D + translation;
     const Eigen::Vector2i point_2D_translated = point_3D_projection(point_3D_translated, fx, fy, cx, cy);
