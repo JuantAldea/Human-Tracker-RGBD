@@ -10,7 +10,7 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    Kinect2VideoReader video_feed = Kinect2VideoReader(std::string("013572345247"), std::string(argv[1]), std::string("avi"));
+    Kinect2VideoReader video_feed(std::string("013572345247"), std::string(argv[1]), std::string("avi"));
     VideoCapture color (string(argv[1]) + string("_color.avi"));
     double t0 = cv::getTickCount();
     while(true){
