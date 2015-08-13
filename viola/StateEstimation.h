@@ -2,8 +2,6 @@
 
 struct StateEstimation
 {
-
-
     float x;
     float y;
     float z;
@@ -46,7 +44,7 @@ struct StateEstimation
     {
         cv::Mat blended_color_model(color_model.rows, color_model.cols, color_model.type());
         cv::Mat blended_torso_color_model(torso_color_model.rows, torso_color_model.cols, torso_color_model.type());
-        
+
         cv::addWeighted(color_model, 1 - o.score_total, o.color_model, o.score_total, 0, blended_color_model);
 
         if(!o.torso_color_model.empty()){
