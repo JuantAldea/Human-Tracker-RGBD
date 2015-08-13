@@ -106,23 +106,27 @@ bool ImageRegistration::loadCalibrationDepthFile(const std::string &filename, do
     return true;
 }
 
-void ImageRegistration::register_images(const cv::Mat &color, const cv::Mat &ir_depth, cv::Mat &out) const
+void ImageRegistration::register_images(const cv::Mat &color, const cv::Mat &ir_depth, cv::Mat &color_out, cv::Mat &ir_depth_out) const
+{
+    register_color(color, color_out);
+    register_ir(ir_depth, ir_depth_out);
+}
+
+void ImageRegistration::register_color(const cv::Mat &color, cv::Mat &color_out) const
 {
     cv::Mat color_flipped;
     cv::flip(color, color_flipped, 1);
-    cv::Mat color_rect;
-    cv::remap(color_flipped, color_rect, map1Color, map2Color, cv::INTER_AREA);
+    cv::remap(color_flipped, color_out, map1Color, map2Color, cv::INTER_AREA);
+}
 
+void ImageRegistration::register_ir(const cv::Mat &ir_depth, cv::Mat &ir_out) const
+{
     cv::Mat ir_depth_shifted;
-
     ir_depth.convertTo(ir_depth_shifted, CV_16U, 1, depthShift);
-
     cv::flip(ir_depth_shifted, ir_depth_shifted, 1);
-
     //cv::Mat depth_shifted_rect;
     //cv::remap(ir_depth_shifted, depth_shifted_rect, map1Ir, map2Ir, cv::INTER_NEAREST);
-
-    depthRegHighRes->registerDepth(ir_depth_shifted, out);
+    depthRegHighRes->registerDepth(ir_depth_shifted, ir_out);
 }
 
 void ImageRegistration::createLookup()

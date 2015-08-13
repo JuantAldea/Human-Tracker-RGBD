@@ -42,6 +42,10 @@ public:
     bool loadCalibrationFile(const std::string &filename, cv::Mat &cameraMatrix, cv::Mat &distortion) const;
     bool loadCalibrationPoseFile(const std::string &filename, cv::Mat &rotation, cv::Mat &translation) const;
     bool loadCalibrationDepthFile(const std::string &filename, double &depthShift) const;
-    void register_images(const cv::Mat &color, const cv::Mat &ir_depth, cv::Mat &out) const;
+
     void createLookup();
+
+    void register_images(const cv::Mat &color, const cv::Mat &ir_depth, cv::Mat &color_out, cv::Mat &ir_depth_out) const;
+    void register_ir(const cv::Mat &ir_depth, cv::Mat &ir_out) const;
+    void register_color(const cv::Mat &color, cv::Mat &color_out) const;
 };
