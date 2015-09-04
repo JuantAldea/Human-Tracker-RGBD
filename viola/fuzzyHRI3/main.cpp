@@ -186,7 +186,7 @@ int main(int argc, char **argv)
     gustereotools::gesturerecognition::PersonMaskExtractor PMaskExtractor;
     ImageComposer ImgComposer;
     StereoFiller8Lines StFiller;
-    PlanViewMaps  PVMaps;
+    PlanViewMaps PVMaps;
     PeopleTracker Tracker; //people tracker
     IplImage *rgbCameraImage, *toVideo, *hsvCameraImage, *auxGrey, *binForegorund,
              *colorMap = NULL; //OpenCV images
@@ -514,8 +514,8 @@ int main(int argc, char **argv)
                             1;    // Como la atencion en esta version se basa en el detector de caras frontales de openCV, si hemos detectada una cara frontal entonces persona esta atenta, sino consideramos que la persona no esta atenta
                     } else {
                         attentionClass = 2;
-                        smileLevel[person] = smileLevel[person] * (1 -
-                                             LEARNINGRATESMILE); // Version con "learning rate" por lo de tener en cuenta la historia. Si no nos interesa hay que desactivar.
+                        // Version con "learning rate" por lo de tener en cuenta la historia. Si no nos interesa hay que desactivar.
+                        smileLevel[person] = smileLevel[person] * (1 - LEARNINGRATESMILE);
                     }
 
                     switch (attentionClass) {

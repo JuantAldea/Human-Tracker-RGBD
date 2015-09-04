@@ -25,9 +25,9 @@ typedef std::pair<face_shape, eyes> face;
 typedef std::vector<face> faces;
 
 
-faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade, const float scale);
+std::vector<cv::Rect> detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade, const float scale);
 
-faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade, const float scale);
+std::vector<cv::Rect> detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade, const float scale);
 
 void print_faces(const faces &detected_faces, cv::Mat &frame, const float scale_width, const float scale_height);
 

@@ -18,6 +18,7 @@ public:
     void close();
 
     void grab(cv::Mat &color, cv::Mat &depth);
+    void grab_next(cv::Mat &color, cv::Mat &depth);
     void grab_copy(cv::Mat &color, cv::Mat &depth);
 
     void update();
@@ -175,6 +176,16 @@ void Kinect2VideoReader::update()
 void Kinect2VideoReader::grab(cv::Mat &color, cv::Mat &depth)
 {
     opened = true;
+    frames_mutex.lock();
+    color = current_rgb.clone();
+    depth = current_depth.clone();
+    frames_mutex.unlock();
+}
+
+void Kinect2VideoReader::grab_next(cv::Mat &color, cv::Mat &depth)
+{
+    opened = true;
+    update_frames();
     frames_mutex.lock();
     color = current_rgb.clone();
     depth = current_depth.clone();

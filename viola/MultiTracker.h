@@ -32,39 +32,51 @@ struct MultiTracker {
     void insert_tracker(const cv::Point &center, const float center_depth,
                         const cv::Mat &hsv_frame, const cv::Mat &depth_frame, EllipseStash &ellipses)
     {
-        auto already_tracked = [&](const float distance) {
+        static int ID = 0;
+
+        auto already_tracked = [&](const float distance_mm) {
             if (states.empty()) {
                 return false;
             }
 
-            const float squared_distance = distance * distance;
+            //TODO CHANGE THIS TO REAL 3D DISTANCE
+            const float min_distance_squared = distance_mm * distance_mm;
             for (size_t i = 0; i < states.size(); i++) {
                 const StateEstimation &state = states[i];
+
                 const float d_x = state.x - center.x;
                 const float d_y = state.y - center.y;
+                const float d_z = state.z - center_depth;
+
                 const float d_x_squared = d_x * d_x;
                 const float d_y_squared = d_y * d_y;
-                if (d_x_squared + d_y_squared < squared_distance) {
+                const float d_z_squared = d_z * d_z;
+
+                const float distance_squared = d_x_squared + d_y_squared + d_z_squared;
+
+                if (distance_squared <= min_distance_squared) {
                     return true;
                 }
+
             }
             return false;
         };
 
-        if (states.size()){
+        if (already_tracked(500)) {
+            //cerr << "ALREADY TRACKED\n";
             return;
         }
 
-        if (already_tracked(100)) {
-            return;
+        if (states.size()){
+            //return;
         }
 
         const cv::Size projection_size = ellipses.get_ellipse_size(BodyPart::HEAD, center_depth);
 
         const int radius_x = projection_size.width * 0.5;
         const int radius_y = projection_size.height * 0.5;
-        const cv::Rect region = cv::Rect(center.x - radius_x, center.y - radius_y, projection_size.width, projection_size.height);
-        const bool fits = rect_fits_in_frame(region, hsv_frame);
+        const cv::Rect head_region = cv::Rect(center.x - radius_x, center.y - radius_y, projection_size.width, projection_size.height);
+        const bool fits = rect_fits_in_frame(head_region, hsv_frame);
 
         if (!fits){
             return;
@@ -73,22 +85,32 @@ struct MultiTracker {
         Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
                                                                 reg->cameraMatrixColor, reg->lookupX, reg->lookupY);
 
+
         const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
-        const cv::Rect torso_roi = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
+        const cv::Rect torso_region = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
                                            cvRound(torso_center[1] - ellipse_axes.height * 0.5f),
                                                ellipse_axes.width, ellipse_axes.height);
 
-        const bool torso_in_frame = rect_fits_in_frame(torso_roi, hsv_frame);
-
+        const bool torso_in_frame = rect_fits_in_frame(torso_region, hsv_frame);
         if (!torso_in_frame){
+            //torso falls out of the frame -> do not track
             return;
         }
 
-        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, reg, &depth_distribution));
+        //if the torso region fits inside the frame, it fits into the depth frame as well, so no need to test bounds
+        const double torso_measured_depth = depth_frame.at<DEPTH_TYPE>(torso_center[1], torso_center[0]);
+
+        if (std::abs(torso_measured_depth - center_depth) > HEAD_TO_CHEST_Z_MAX_DIFFERENCE_MM) {
+            // torso occluded -> do not track
+            return;
+        }
+
+        trackers.push_back(CImageParticleFilter<DEPTH_TYPE>(&ellipses, reg, &depth_distribution, ID));
         states.push_back(StateEstimation());
         new_states.push_back(StateEstimation());
         init_tracking(center, center_depth, hsv_frame, depth_frame, ellipse_normals,
                                   trackers.back(), states.back(), ellipses, *reg);
+        ID++;
     };
 
     void tracking(const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
@@ -107,7 +129,7 @@ struct MultiTracker {
             build_state_model(particles, estimated_state, estimated_new_state, hsv_frame,
                 depth_frame, ellipses, reg);
 
-            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution, particles.get_object_found());
+            score_visual_model(estimated_state, estimated_new_state, gradient_vectors, ellipse_normals, depth_distribution, particles.get_object_found(), i);
             //printf("RADIUS1 %d %d %f - %d %d %f\n", estimated_state.radius_x, estimated_state.radius_y, estimated_state.z, estimated_new_state.radius_x, estimated_new_state.radius_y, estimated_new_state.z);
             particles.last_time = cv::getTickCount();
         }
@@ -137,11 +159,13 @@ struct MultiTracker {
             if (score < LIKEHOOD_FOUND) {
                 particles.set_object_missing();
                 //estimated_new_state = estimated_state;
-                particles.init_particles(NUM_PARTICLES,
+
+                particles.init_particles(NUM_PARTICLES * 3,
                                   make_pair(estimated_state.x, estimated_state.radius_x * 2),
                                   make_pair(estimated_state.y, estimated_state.radius_y * 2),
                                   make_pair(float(estimated_state.z), 100.f),
                                   make_pair(0, 0), make_pair(0, 0), make_pair(0, 0));
+
                 //printf("INIT STD %f %d %d\n", particles.missing_uncertaincy_multipler, estimated_state.radius_x, estimated_state.radius_y);
             }
         }
@@ -244,18 +268,18 @@ struct MultiTracker {
             }
             */
 
-            cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
+            //cv::circle(color_display_frame, cv::Point(estimated_state.x, estimated_state.y), 20, cv::Scalar(255, 0, 0), 5, 1, 0);
             const size_t N_PARTICLES = particles.m_particles.size();
 
             {
                 std::ostringstream oss;
                 std::ostringstream oss2;
 
-                oss << i << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape
+                oss << particles.ID << ' ' << estimated_state.score_total << ' ' << estimated_state.score_shape
                     << ' ' << estimated_state.score_color << ' ' << estimated_state.torso_color_score
                     << ' ' << estimated_state.score_z << ' ' << trackers[i].transition_model_std_xy;
 
-                oss2 << i << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape
+                oss2 << particles.ID << ' ' << estimated_new_state.score_total << ' ' << estimated_new_state.score_shape
                      << ' ' << estimated_new_state.score_color << ' ' << estimated_new_state.torso_color_score
                      << ' ' << estimated_new_state.score_z;
 
@@ -265,8 +289,8 @@ struct MultiTracker {
 
                 int baseline = 0;
                 cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
-                cv::Point textOrg(estimated_state.x - textSize.width * 0.5f, estimated_state.y - textSize.height * 0.5f);
-                cv::Point textOrg2 = textOrg + cv::Point(0, textSize.height * 1.2);
+                cv::Point textOrg(estimated_state.x - textSize.width * 0.5f, estimated_state.y - textSize.height);
+                cv::Point textOrg2 = textOrg + cv::Point(0, textSize.height * 2.5);
                 //cv::Point textOrg(textSize.width, textSize.height);
                 putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
                 putText(color_display_frame, oss2.str(), textOrg2, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);

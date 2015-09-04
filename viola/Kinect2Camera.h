@@ -4,17 +4,27 @@ using namespace std;
 
 #include "Kinect2Feed.h"
 
+IGNORE_WARNINGS_PUSH
+
+#include <libfreenect2/libfreenect2.hpp>
+#include <libfreenect2/packet_pipeline.h>
+#include <libfreenect2/frame_listener_impl.h>
+#include <libfreenect2/threading.h>
+#include <libfreenect2/registration.h>
+
+IGNORE_WARNINGS_POP
+
 class Kinect2Camera : public Kinect2Feed
 {
 public:
     Kinect2Camera();
     Kinect2Camera(const string &serial);
-    
+
     ~Kinect2Camera();
-    
+
     void open();
     void open(const string &serial);
-    
+
     void close();
 
     void grab(cv::Mat &color, cv::Mat &depth) override;
@@ -58,12 +68,12 @@ void Kinect2Camera::open()
 
 
 void Kinect2Camera::open(const string &serial_number)
-{    
+{
     if (freenect2.enumerateDevices() == 0) {
         std::cout << "No Kinect V2 connected." << std::endl;
         exit(-1);
     }
-    
+
     device_serial_number = serial_number;
 
     pipeline = new libfreenect2::OpenCLPacketPipeline();
@@ -81,7 +91,7 @@ void Kinect2Camera::open(const string &serial_number)
 
     pipeline->getDepthPacketProcessor()->setConfiguration(config);
     dev = freenect2.openDevice(device_serial_number, pipeline);
-    
+
     if (dev == nullptr) {
         std::cout << "Device #" << device_serial_number << " not conected." << std::endl;
         exit(-1);
@@ -108,13 +118,13 @@ void Kinect2Camera::grab(cv::Mat &color_mat, cv::Mat &depth_mat)
 {
     listener->release(frames_kinect2);
     listener->waitForNewFrame(frames_kinect2);
-    
+
     libfreenect2::Frame *rgb = frames_kinect2[libfreenect2::Frame::Color];
     color_mat = cv::Mat(rgb->height, rgb->width, CV_8UC3, rgb->data);
-    
+
     libfreenect2::Frame *depth = frames_kinect2[libfreenect2::Frame::Depth];
     depth_mat = cv::Mat(depth->height, depth->width, CV_32FC1, depth->data);
-    
+
     //libfreenect2::Frame *ir = frames_kinect2[libfreenect2::Frame::Ir];
     //ir = cv::Mat(depth->height, depth->width, CV_32FC1, ir->data);
 }

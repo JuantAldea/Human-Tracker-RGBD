@@ -70,7 +70,7 @@ public:
     CHistogram hist_score;
 
     static double WEIGHT_INVALID;
-    CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const depth_distribution);
+    CImageParticleFilter(EllipseStash *ellipses, const ImageRegistration * const reg, const normal_dist * const depth_distribution, const int ID);
     using ParticleType = typename decltype(m_particles)::value_type;
 
     void update_particles_with_transition_model(const double dt, const mrpt::obs::CSensoryFrame * const observation);
@@ -113,8 +113,8 @@ public:
 
     int object_times_missing;
 
-    
 
+    int ID;
 #ifdef DEBUG
     CDisplayWindow particle_window;
     CImage particle_image;

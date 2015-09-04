@@ -16,7 +16,9 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra --fast-math -O3 -std=gnu++
 #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O3 -std=gnu++11 -pg -fbuiltin -fdiagnostics-color=always -Wno-unused-parameter -Wno-unused-variable")
 
 #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -ggdb3 --fast-math -O0 -std=gnu++11 -pg -fbuiltin -fno-inline -fno-omit-frame-pointer -fdiagnostics-color=always -Wno-unused-variable")
-#SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+SET(CMAKE_EXE_LINKER_FLAGS "-pg")
+
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4 -ftree-vectorize  -ftree-vectorizer-verbose=7")
 
 FIND_PACKAGE(PkgConfig QUIET)
 
@@ -39,6 +41,7 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 find_package(OpenMP)
 
 if(OPENMP_FOUND)
+  message("OMP")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
 
@@ -78,6 +81,8 @@ add_header_lib(EllipseFunctions)
 ADD_LIBRARY(FacesDetection STATIC FacesDetection.cpp)
 ADD_LIBRARY(ImageRegistration STATIC ImageRegistration.cpp)
 
+ADD_LIBRARY(SmileEstimator STATIC fuzzyHRI3/smileestimator.cpp)
+
 #add_header_lib(ImageRegistration)
 #add_header_lib(FacesDetection)
 
@@ -91,6 +96,7 @@ ADD_EXECUTABLE(particle_filter_main particle_filter_main.cpp)
 ADD_EXECUTABLE(kinect2_recorder kinect2_recorder.cpp)
 
 ADD_EXECUTABLE(kinect2_video_replay Kinect2VideoReplay.cpp)
+ADD_EXECUTABLE(smiletest SmileTest.cpp)
 
 #ADD_EXECUTABLE(kinect_3d_view kinect_3d_view.cpp)
 #ADD_EXECUTABLE(calibration_pairs calibration_pairs.cpp)
@@ -106,6 +112,8 @@ ADD_EXECUTABLE(kinect2_video_replay Kinect2VideoReplay.cpp)
 #ADD_EXECUTABLE(hog peopledetect.cpp)
 #ADD_EXECUTABLE(Boost-normal Boost-normal.cpp)
 ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
+ADD_EXECUTABLE(kmeans kmeans.cpp)
+ADD_EXECUTABLE(watershed watershed.cpp)
 
 FIND_PACKAGE(OpenCL REQUIRED)
 FIND_PACKAGE(Boost REQUIRED system serialization)
@@ -128,6 +136,19 @@ TARGET_LINK_LIBRARIES(kinect2_recorder
 
 TARGET_LINK_LIBRARIES(kinect2_video_replay
     ${OpenCV_LIBS}
+)
+
+TARGET_LINK_LIBRARIES(smiletest
+    ${OpenCV_LIBS}
+    dlib
+    FacesDetection
+    SmileEstimator
+    ImageRegistration
+    -lguia_addon
+    -lgustereotools
+    -lgustereo3
+    -lguopencv
+    -lpnmutils
 )
 
 TARGET_LINK_LIBRARIES(model_projections_precalculator
@@ -167,6 +188,16 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     BoostSerializers
     ModelParameters
     dlib
+)
+
+TARGET_LINK_LIBRARIES(kmeans
+    ${OpenCV_LIBS}
+    ${DEPTH_REGISTRATION_LIBRARY}
+    ImageRegistration
+)
+
+TARGET_LINK_LIBRARIES(watershed
+    ${OpenCV_LIBS}
 )
 
 #[[

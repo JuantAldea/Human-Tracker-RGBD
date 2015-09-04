@@ -39,7 +39,7 @@ void print_faces(const faces &detected_faces, Mat &frame, float scale_width, flo
     }
 }
 
-faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade, const float scale)
+std::vector<cv::Rect> detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeClassifier &eyes_cascade, const float scale)
 {
     const float inv_scale = 1.f / scale;
     cv::Mat frame_gray_aux;
@@ -64,6 +64,7 @@ faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeCla
     std::vector<Rect> faces;
     //face_cascade.detectMultiScale(frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
     face_cascade.detectMultiScale(frame_gray, faces, 1.2, 5, 0 | CV_HAAR_SCALE_IMAGE, Size(30, 30), Size(190, 190));
+    /*
     for (auto detected_face : faces) {
         std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
         Mat faceROI = frame_gray(detected_face);
@@ -83,6 +84,8 @@ faces detect_faces(const Mat &frame, CascadeClassifier &face_cascade, CascadeCla
     }
 
     return detected_faces;
+    */
+    return faces;
 }
 
 std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade,
@@ -99,25 +102,23 @@ std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::oc
     }
     */
 
-    for (auto &face : viola_detected){
-        const cv::Rect &face_rect = cv::Rect(face.first.x, face.first.y, face.first.width, face.first.height);
-
-        const cv::Rect face_rect_extended = cv::Rect(face_rect.x - cvRound(face_rect.width * 0.25), face.first.y -  cvRound(face_rect.height * 0.25),
+    for (auto &face_rect : viola_detected){
+        const cv::Rect face_rect_extended = cv::Rect(face_rect.x - cvRound(face_rect.width * 0.25), face_rect.y -  cvRound(face_rect.height * 0.25),
             cvRound(face_rect.width * 1.50),  cvRound(face_rect.height * 1.50));
 
         const cv::Rect face_rect_clamped = clamp_rect_to_frame(face_rect_extended, color_frame);
         //cv::Rect face_rect_clamped = face_rect_extended;
 
-        std::cout << face_rect << std::endl;
-        std::cout << face_rect_extended << std::endl;
-        std::cout << face_rect_clamped << std::endl;
+        //std::cout << face_rect << std::endl;
+        //std::cout << face_rect_extended << std::endl;
+        //std::cout << face_rect_clamped << std::endl;
         //face_rect_clamped = cv::Rect(0, 0, color_frame.cols-1, color_frame.rows-1);
         const cv::Mat extended_face_roi = color_frame(face_rect_clamped);
         const dlib::cv_image<dlib::bgr_pixel> dlib_img(extended_face_roi);
         std::vector<dlib::rectangle> faces = dlib_detector(dlib_img);
 
-        cv::rectangle(color_display_frame, face_rect, cv::Scalar(255, 0, 0), 4);
-        cv::rectangle(color_display_frame, face_rect_extended, cv::Scalar(0, 255, 0), 4);
+        cv::rectangle(color_display_frame, face_rect, cv::Scalar(255, 0, 0), 1);
+        cv::rectangle(color_display_frame, face_rect_extended, cv::Scalar(0, 255, 0), 1);
 
         if (faces.empty()) {
             continue;
@@ -129,17 +130,17 @@ std::vector<cv::Rect> detect_faces_dual(const cv::ocl::oclMat &ocl_frame, cv::oc
         const cv::Rect rect_dlib_face_global = cv::Rect(face_rect_clamped.x + rect_dlib_face_local.x, face_rect_clamped.y + rect_dlib_face_local.y,
             rect_dlib_face_local.width, rect_dlib_face_local.height);
 
-        cv::rectangle(color_display_frame, rect_dlib_face_global, cv::Scalar(0, 0, 255), 8);
-        std::cout << " DLIB " << rect_dlib_face_global << std::endl;
+        cv::rectangle(color_display_frame, rect_dlib_face_global, cv::Scalar(0, 0, 255), 1);
+        //std::cout << " DLIB " << rect_dlib_face_global << std::endl;
+        //confirmed_faces.push_back(face_rect_extended);
         //confirmed_faces.push_back(rect_dlib_face_global);
-
         confirmed_faces.push_back(face_rect);
     }
 
     return confirmed_faces;
 }
 
-faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade, const float scale)
+std::vector<cv::Rect> detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifier &face_cascade, cv::ocl::OclCascadeClassifier &eyes_cascade, const float scale)
 {
     const float inv_scale = 1.f / scale;
     cv::ocl::oclMat ocl_frame_gray_aux;
@@ -151,15 +152,14 @@ faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifi
 
     cv::ocl::equalizeHist(ocl_frame_gray_aux, ocl_frame_gray_aux);
 
-    //cv::ocl::oclMat ocl_frame_gray;
     cv::ocl::oclMat ocl_frame_gray(cvRound(ocl_frame_gray_aux.rows * inv_scale), cvRound(ocl_frame_gray_aux.cols * inv_scale), ocl_frame_gray_aux.type());
     cv::ocl::resize(ocl_frame_gray_aux, ocl_frame_gray, ocl_frame_gray.size(), 0, 0, INTER_LINEAR);
-
-    faces detected_faces;
 
     std::vector<Rect> faces;
     //face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.1, 2, 0 | CV_HAAR_SCALE_IMAGE, Size(80, 80));
     face_cascade.detectMultiScale(ocl_frame_gray, faces, 1.2, 5, 0 | CV_HAAR_SCALE_IMAGE, Size(28, 48), Size(354, 590));
+    /*
+    faces detected_faces;
     //std::cout << "EYES FACES DETECTED: " << faces.size() << std::endl;
     for (auto detected_face : faces) {
         cv::ocl::oclMat faceROI = ocl_frame_gray(detected_face);
@@ -177,6 +177,8 @@ faces detect_faces(const cv::ocl::oclMat &ocl_frame, cv::ocl::OclCascadeClassifi
     }
 
     return detected_faces;
+    */
+    return faces;
 }
 
 std::vector<cv::Vec3f> detect_circles(const cv::Mat &image)

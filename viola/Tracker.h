@@ -2,7 +2,7 @@
 
 #include "StateEstimation.h"
 #include "EllipseStash.h"
-CDisplayWindow image2("image2");
+//CDisplayWindow image2("image2");
 
 template<typename DEPTH_TYPE>
 bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &hsv_frame, const cv::Mat &depth_frame,
@@ -103,6 +103,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
                                          cvRound(new_state.x));
     //TODO USE MEAN DEPTH OF THE ELLIPSE
     const double z = center_measured_depth > 0 ? center_measured_depth : old_state.z;
+    new_state.z = z;
 
 
     const cv::Size projection_size = ellipses.get_ellipse_size(BodyPart::HEAD, z);
@@ -117,23 +118,44 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
         return;
     }
 
+    {
+        const cv::Mat ellipse_mask = ellipses.get_ellipse_mask_1D(BodyPart::HEAD, z);
+        const cv::Mat depth_roi = depth_frame(new_state.region);
+        cv::Mat depth_roi_masked;
+        depth_roi.copyTo(depth_roi_masked, ellipse_mask);
+        float non_zero = cv::countNonZero(depth_roi_masked);
+        cv::Scalar sum = cv::sum(depth_roi_masked);
+        new_state.average_z = sum[0] / non_zero;
+    }
+
     const cv::Mat mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::HEAD, z);
     cv::Mat hsv_roi = hsv_frame(new_state.region);
     new_state.color_model = compute_color_model2(hsv_roi, mask_weights);
 
     //CHEST
-    const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, new_state.z);
+
+    //in case the chest not visible the old model is kept.
+    new_state.torso_color_model = old_state.torso_color_model;
+
     Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(new_state.x, new_state.y, new_state.z, HEAD_TO_TORSE_CENTER_VECTOR,
                                    reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
 
+
+    const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, new_state.z);
     const cv::Rect torso_rect = cv::Rect(cvRound(torso_center[0] - torso_mask_weights.cols * 0.5f),
                                          cvRound(torso_center[1] - torso_mask_weights.rows * 0.5f),
                                          torso_mask_weights.cols, torso_mask_weights.rows);
 
-    //if the chest is not visible the old model is kept.
-    new_state.torso_color_model = old_state.torso_color_model;
-
+    // chest region might fall out of the frame
     if (!rect_fits_in_frame(torso_rect, hsv_frame)) {
+        return;
+    }
+
+    //if the torso region fits inside the frame it fits into the depth frame as well, so no need to test bounds
+    const double torso_measured_depth = depth_frame.at<DEPTH_TYPE>(torso_center[1], torso_center[0]);
+
+    // under chest occlusion condition the chest color model should not be updated.
+    if (std::abs(torso_measured_depth - new_state.z) > HEAD_TO_CHEST_Z_MAX_DIFFERENCE_MM) {
         return;
     }
 
@@ -142,7 +164,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
 }
 
 void score_visual_model(const StateEstimation &state, StateEstimation &new_state, const cv::Mat &gradient_vectors,
-                        const std::vector<Eigen::Vector2f> &shape_model, const boost::math::normal_distribution<float> &depth_normal_distribution, const bool object_found)
+                        const std::vector<Eigen::Vector2f> &shape_model, const boost::math::normal_distribution<float> &depth_normal_distribution, const bool object_found, const int index)
 {
     if (new_state.color_model.empty()) {
         new_state.score_total = -1;
@@ -165,5 +187,15 @@ void score_visual_model(const StateEstimation &state, StateEstimation &new_state
 
     //const float score_z = object_found * new_state.score_z + !object_found * std::max(1.0, new_state.score_z * 1.25);
     new_state.score_total = new_state.score_color * new_state.score_shape * new_state.torso_color_score * new_state.score_z;
+    //new_state.score_total = 0.25 * (new_state.score_color + new_state.score_shape + new_state.torso_color_score + new_state.score_z);
+    std::cout << "STREAM:0:" << index * 1.5 + new_state.score_total << std::endl;
+    std::cout << "STREAM:1:" << index * 1.5 + new_state.score_color << std::endl;
+    std::cout << "STREAM:2:" << index * 1.5 + new_state.score_shape << std::endl;
+    std::cout << "STREAM:3:" << index * 1.5 + new_state.torso_color_score << std::endl;
+    std::cout << "STREAM:4:" << index * 1.5 + new_state.score_z << std::endl;
+    std::cout << "STREAM:5:" << index * 1.5 + object_found << std::endl;
+    std::cout << "STREAM:6:" << new_state.z << std::endl;
+    std::cout << "STREAM:7:" << std::abs(state.average_z - new_state.average_z) << std::endl;
+
     //printf("SCORE: %f · %f · %f · %f = %f\n", new_state.torso_color_score, new_state.score_shape, new_state.score_color, new_state.score_z, new_state.score_total);
 }
