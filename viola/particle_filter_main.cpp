@@ -43,6 +43,8 @@ IGNORE_WARNINGS_POP
 
 #include "PersonMask.h"
 
+#define USE_HALF_RES
+
 using namespace mrpt;
 using namespace mrpt::bayes;
 using namespace mrpt::gui;
@@ -181,9 +183,18 @@ int particle_filter()
     ImageRegistration reg;
     reg.init(calib_path, video_feed.get_device_serial_number());
 
+#ifdef USE_HALF_RES
+    reg.createLookup(reg.sizeLowRes.width, reg.sizeLowRes.height, reg.cameraMatrixLowRes);
+#endif
     //load or precompute ellipses projections
+
+#ifndef USE_HALF_RES
     EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO},
         std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.300000x0.200000.bin"});
+#else
+    EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO},
+        std::vector<std::string>{"ellipses_half_0.150000x0.250000.bin", "ellipses_half_0.300000x0.200000.bin"});
+#endif
 
     cv::Mat color_frame;
     cv::Mat color_display_frame;
@@ -301,8 +312,13 @@ int particle_filter()
         reg.register_images(color_mat, depth_mat, registered_color, registered_depth);
 
         // Observation building
+#ifndef USE_HALF_RES
         color_frame = registered_color;
         depth_frame = registered_depth;
+#else
+        cv::resize(registered_color, color_frame, reg.sizeLowRes, 0, 0, cv::INTER_AREA);
+        cv::resize(registered_depth, depth_frame, reg.sizeLowRes, 0, 0, cv::INTER_AREA);
+#endif
         color_display_frame = color_frame.clone();
 
         float registration_t = (cv::getTickCount() - registration_t0) / double(cv::getTickFrequency());
@@ -360,7 +376,7 @@ int particle_filter()
         std::cout << "TIMES_COLOR_CONVERSION " << color_conversion_t << std::endl;
         std::cout << "TIMES_SOBEL " << sobel_t << std::endl;
 
-        //cv::Mat frame_3D_points = depth_3D_reprojection(depth_frame, reg.cameraMatrixColor);
+        //cv::Mat frame_3D_points = depth_3D_reprojection(depth_frame, reg.cameraMatrix);
 
         //cv::Mat hsv_frame;
         //cv::cvtColor(color_frame, hsv_frame, cv::COLOR_BGR2HSV);
@@ -446,7 +462,7 @@ int particle_filter()
             }
             std::cout << "DEPTH " << center_depth << std::endl;
             std::cout << "person_mask " << state.center.x << ' ' << state.center.y << ' ' <<  center_depth << std::endl;
-            Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(state.center.x, state.center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR, reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+            Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(state.center.x, state.center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR, reg.cameraMatrix, reg.lookupX, reg.lookupY);
 
             const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);
             const cv::Rect torso_roi = cv::Rect(cvRound(torso_center[0] - ellipse_axes.width * 0.5f),
@@ -553,9 +569,9 @@ int particle_filter()
         //cv::bitwise_not(in_range_mask, in_range_mask);
         //bitwise_and(registered_depth, zero_depth, registered_depth, in_range_mask);
 
-        dispDepth(registered_depth, depthDisp, 12000.0f);
+        dispDepth(depth_frame, depthDisp, 12000.0f);
         cv::Mat combined;
-        combine(registered_color, depthDisp, combined);
+        combine(color_frame, depthDisp, combined);
         //int a = 140;
         //int b = 290;
         //cv::Mat combined2 = combined(cv::Rect(a, 0, combined.cols - a - b, combined.rows));
@@ -591,10 +607,14 @@ int particle_filter()
         cv::Mat display_mask(10, 10, CV_8UC1);
         if (trackers.states.size()){
             int mean_pixel_x, mean_pixel_y;
+
+            /*
             std::cout << "ASD " << color_frame.rows <<'x' << color_frame.cols << ' '
                       << background_mask_depth.rows << 'x' << background_mask_depth.cols
                       << depth_frame.rows << 'x' << depth_frame.cols << std::endl;
-            mask = person_mask(trackers.states[0].x, trackers.states[0].y, trackers.states[0].z, color_frame, depth_frame, background_mask_depth, reg.cameraMatrixColor, reg.lookupX, reg.lookupY, color_display_frame, display_mask);
+            */
+
+            mask = person_mask(trackers.states[0].x, trackers.states[0].y, trackers.states[0].z, color_frame, depth_frame, background_mask_depth, reg.cameraMatrix, reg.lookupX, reg.lookupY, color_display_frame, display_mask);
 
             //markers.at<int32_t>() = 1;
 
@@ -637,10 +657,10 @@ int particle_filter()
         //}
 
         //std::vector<Eigen::Vector3f> points_3d = points_3D_reprojection<DEPTH_DATA_TYPE>(particle_vectors, depth_frame, reg.lookupX, reg.lookupY);
-        //std::vector<Eigen::Vector3f> particle_points_3d = pixel_depth_to_3D_coordiantes(particle_vectors3d_2, reg.cameraMatrixColor);
+        //std::vector<Eigen::Vector3f> particle_points_3d = pixel_depth_to_3D_coordiantes(particle_vectors3d_2, reg.cameraMatrix);
         //create_cloud(points_3d, particle_points_map);
         //create_cloud(particle_vectors3d, particle_points_map);
-        //points_3d[0] = pixel_depth_to_3D_coordiantes(Eigen::Vector3f(x_global, y_global, depth_frame.at<DEPTH_TYPE>(y_global, x_global)), reg.cameraMatrixColor);
+        //points_3d[0] = pixel_depth_to_3D_coordiantes(Eigen::Vector3f(x_global, y_global, depth_frame.at<DEPTH_TYPE>(y_global, x_global)), reg.cameraMatrix);
         //create_cloud(particle_points_3d, 1.0/1000.0f, particle_points_map);
 
         win3D.get3DSceneAndLock();

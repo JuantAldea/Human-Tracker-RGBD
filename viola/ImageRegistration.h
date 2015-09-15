@@ -26,13 +26,17 @@ class ImageRegistration
 public:
     cv::Size sizeColor;
     cv::Size sizeIr;
+    cv::Size sizeLowRes;
     cv::Mat cameraMatrixColor, distortionColor, cameraMatrixIr, distortionIr;
+    cv::Mat cameraMatrixLowRes;
+    cv::Mat cameraMatrix;
     cv::Mat rotation, translation;
-    cv::Mat map1Color, map2Color, map1Ir, map2Ir;
+    cv::Mat map1Color, map2Color, map1Ir, map2Ir, map1LowRes, map2LowRes;
     cv::Mat lookupX, lookupY;
     double depthShift;
     double maxDepth;
     DepthRegistration *depthRegHighRes;
+    DepthRegistration *depthRegLowRes;
 
 public:
     ImageRegistration();
@@ -43,7 +47,7 @@ public:
     bool loadCalibrationPoseFile(const std::string &filename, cv::Mat &rotation, cv::Mat &translation) const;
     bool loadCalibrationDepthFile(const std::string &filename, double &depthShift) const;
 
-    void createLookup();
+    void createLookup(const size_t width, const size_t height, const cv::Mat cameraMatrix);
 
     void register_images(const cv::Mat &color, const cv::Mat &ir_depth, cv::Mat &color_out, cv::Mat &ir_depth_out) const;
     void register_ir(const cv::Mat &ir_depth, cv::Mat &ir_out) const;

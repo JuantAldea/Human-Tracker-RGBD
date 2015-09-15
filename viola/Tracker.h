@@ -64,7 +64,7 @@ bool init_tracking(const cv::Point &center, float center_depth, const cv::Mat &h
     const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, center_depth);
 
     Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
-                                   reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                                   reg.cameraMatrix, reg.lookupX, reg.lookupY);
 
     const cv::Rect torso_rect = cv::Rect(cvRound(torso_center[0] - torso_mask_weights.cols * 0.5f),
                                          cvRound(torso_center[1] - torso_mask_weights.rows * 0.5f),
@@ -138,7 +138,7 @@ void build_state_model(const CImageParticleFilter<DEPTH_TYPE> &particles,
     new_state.torso_color_model = old_state.torso_color_model;
 
     Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(new_state.x, new_state.y, new_state.z, HEAD_TO_TORSE_CENTER_VECTOR,
-                                   reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                                   reg.cameraMatrix, reg.lookupX, reg.lookupY);
 
 
     const cv::Mat torso_mask_weights = ellipses.get_ellipse_mask_weights(BodyPart::TORSO, new_state.z);

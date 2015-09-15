@@ -3,7 +3,7 @@
 cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_frame, cv::Mat depth_frame, cv::Mat background_depth, cv::Mat cameraMatrix, cv::Mat lookupX, cv::Mat lookupY, cv::Mat &display, cv::Mat &display_mask)
 {
 
-    std::cout <<"SIZE " << depth_frame.rows << ' ' << depth_frame.cols << std::endl;
+    //std::cout <<"SIZE " << depth_frame.rows << ' ' << depth_frame.cols << std::endl;
     using namespace Eigen;
 
     const float fx = cameraMatrix.at<double>(0, 0);
@@ -16,7 +16,7 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     Vector3f translation_lower_right(1.0, 0.5, 0.0);
 
     Eigen::Vector3f point_3D = point_3D_reprojection(x, y, z, lookupX, lookupY);
-    std::cout << "person_mask 3d " << ' ' << point_3D[0] << ' ' << point_3D[1] << ' ' << point_3D[2] << std::endl;
+    //std::cout << "person_mask 3d " << ' ' << point_3D[0] << ' ' << point_3D[1] << ' ' << point_3D[2] << std::endl;
     point_3D[1] = 0;
 
     const Vector3f point_3D_upper_left = point_3D + translation_upper_left;
@@ -34,13 +34,13 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     //Vector2i upper_left = translate_2D_vector_in_3D_space(x, y, z, translation_upper_left, cameraMatrix, lookupX, lookupY);
     //Vector2i upper_right = translate_2D_vector_in_3D_space(x, y, z, translation_lower_right, cameraMatrix, lookupX, lookupY);
 
-    std::cout << "person_mask LEFT " << upper_left[0] << ' ' << upper_left[1] << std::endl;
-    std::cout << "person_mask RIGTH " << lower_right[0] << ' ' << lower_right[1] << std::endl;
+    //std::cout << "person_mask LEFT " << upper_left[0] << ' ' << upper_left[1] << std::endl;
+    //std::cout << "person_mask RIGTH " << lower_right[0] << ' ' << lower_right[1] << std::endl;
 
     cv::Rect person_rect(upper_left[0], upper_left[1], lower_right[0] - upper_left[0], lower_right[1] - upper_left[1]);
-    std::cout << "person_mask RECT " << person_rect << std::endl;
+    //std::cout << "person_mask RECT " << person_rect << std::endl;
     person_rect = clamp_rect_to_frame(person_rect, depth_frame);
-    std::cout << "person_mask CLAMP " << person_rect << std::endl;
+    //std::cout << "person_mask CLAMP " << person_rect << std::endl;
 
     //cv::Mat person_rgb_roi = rgb_frame(person_rect);
     cv::Mat person_depth_roi = depth_frame(person_rect).clone();
@@ -59,13 +59,13 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     float mean_x = 0;
     float mean_y = 0;
     int n = 0;
-    cout << "TYPE MASK " << type2str(person_mask.type()) << std::endl;
+    //cout << "TYPE MASK " << type2str(person_mask.type()) << std::endl;
     //int mask_row_step = depth_frame.rows - person_mask.rows;
     for(int y = 0; y < person_mask.rows; y++){
         //uint8_t *mask_col = person_mask.at<uint8_t>(y, x);
         for(int x = 0; x < person_mask.cols; x++){
             const uint8_t pixel_in_mask = person_mask.at<uint8_t>(y, x);
-            std::cout << "ASD" << int(pixel_in_mask) << std::endl;
+            //std::cout << "ASD " << int(pixel_in_mask) << std::endl;
             mean_x += x * (pixel_in_mask != 0);
             mean_y += y * (pixel_in_mask != 0);
             n += (pixel_in_mask != 0);
@@ -75,7 +75,7 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     int mean_pixel_x = 0.5 + (mean_x / n);
     int mean_pixel_y = 0.5 + (mean_y / n);
 
-    cout << "TYPE MASK " << mean_x << ' ' << mean_y << ' ' << n << std::endl;
+    //cout << "TYPE MASK " << mean_x << ' ' << mean_y << ' ' << n << std::endl;
 
 
     const Eigen::Vector3f center_3D = point_3D_reprojection(mean_pixel_x, mean_pixel_y, z, lookupX, lookupY);
@@ -138,13 +138,13 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
             break;
         }
     }
-    cout << "COSO LAST " << last_zero << ' '<< y_pixels.size() << ' ' << (y_pixels.size() - last_zero) * 0.25<< std::endl;
+    //cout << "COSO LAST " << last_zero << ' '<< y_pixels.size() << ' ' << (y_pixels.size() - last_zero) * 0.25<< std::endl;
 
     //y_pixels.erase(y_pixels.begin(), y_pixels.begin() + last_zero);
     float sum = std::accumulate(y_pixels.begin() + last_zero, y_pixels.begin() + last_zero + int((y_pixels.size() - last_zero) * 0.25), 0);
 
     const int average_y = 0.5 + sum / int((y_pixels.size() - last_zero) * 0.25);
-    cout <<"COSO " << average_y << std::endl;
+    //cout <<"COSO " << average_y << std::endl;
 
 
     //cv::line(display, offset + cv::Point(left[0], average_y), offset + cv::Point(right[0], average_y), cv::Scalar(0), 5);

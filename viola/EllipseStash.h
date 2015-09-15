@@ -124,12 +124,12 @@ protected:
         const float model_semiaxis_x = (part == BodyPart::TORSO) ? PERSON_TORSO_X_AXIS_METTERS : PERSON_HEAD_X_SEMIAXIS_METTERS;
         const float model_semiaxis_y = (part == BodyPart::TORSO) ? PERSON_TORSO_Y_AXIS_METTERS : PERSON_HEAD_Y_SEMIAXIS_METTERS;
 
-        const float cx = reg.cameraMatrixColor.at<double>(0, 2);
-        const float cy = reg.cameraMatrixColor.at<double>(1, 2);
+        const float cx = reg.cameraMatrix.at<double>(0, 2);
+        const float cy = reg.cameraMatrix.at<double>(1, 2);
 
         Eigen::Vector2i top_corner, bottom_corner;
         std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cx, cy), depth,
-                                          Eigen::Vector2f(model_semiaxis_x, model_semiaxis_y), reg.cameraMatrixColor,
+                                          Eigen::Vector2f(model_semiaxis_x, model_semiaxis_y), reg.cameraMatrix,
                                           reg.lookupX, reg.lookupY);
         int n_pixels;
         cv::Rect region = cv::Rect(top_corner[0], top_corner[1], bottom_corner[0] - top_corner[0],

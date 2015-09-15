@@ -83,7 +83,7 @@ struct MultiTracker {
         }
 
         Eigen::Vector2i torso_center = translate_2D_vector_in_3D_space(center.x, center.y, center_depth, HEAD_TO_TORSE_CENTER_VECTOR,
-                                                                reg->cameraMatrixColor, reg->lookupX, reg->lookupY);
+                                                                reg->cameraMatrix, reg->lookupX, reg->lookupY);
 
 
         const cv::Size ellipse_axes = ellipses.get_ellipse_size(BodyPart::TORSO, center_depth);

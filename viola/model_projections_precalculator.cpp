@@ -35,9 +35,16 @@ int main(int argc, char *argv[])
     std::string calib_path = std::string(calib_dir) + "/kinect2_calib/";
     ImageRegistration reg;
     reg.init(calib_path, serial);
+    cv::Mat cameraMatrix = reg.cameraMatrixColor;
 
-    float cx = reg.cameraMatrixColor.at<double>(0, 2);
-    float cy = reg.cameraMatrixColor.at<double>(1, 2);
+    if (argv[3][0] == 'h'){
+        cameraMatrix = reg.cameraMatrixLowRes;
+        reg.createLookup(reg.sizeLowRes.width, reg.sizeLowRes.height, cameraMatrix);
+        //std::cout << "HALF\n";
+    }
+
+    float cx = cameraMatrix.at<double>(0, 2);
+    float cy = cameraMatrix.at<double>(1, 2);
     std::cout << "cx " << cx << ' ' << "cy " << cy << std::endl;
     //const float cx = 1000 * 0.5;
     //const float cy = 500 * 0.5;
@@ -51,7 +58,7 @@ int main(int argc, char *argv[])
     std::map<std::string, std::tuple<std::list<int>, EllipseData>> mask;
     std::cout << "#SIZE: " << X_SEMI_AXIS_METTERS << ' ' << Y_SEMI_AXIS_METTERS << std::endl;
     char filename[100];
-    sprintf(filename, "ellipses_%fx%f.bin", atof(argv[1]), atof(argv[2]));
+    sprintf(filename, "ellipses_%s_%fx%f.bin", argv[3], atof(argv[1]), atof(argv[2]));
     char size[100];
 
     //for (int cxx = 0; cxx < 1920; cxx+=1)
@@ -66,7 +73,7 @@ int main(int argc, char *argv[])
             Eigen::Vector2i top_corner, bottom_corner;
             std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cx, cy), depth,
                                                   Eigen::Vector2f(X_SEMI_AXIS_METTERS, Y_SEMI_AXIS_METTERS),
-                                                  reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                                                  cameraMatrix, reg.lookupX, reg.lookupY);
             model_length = bottom_corner - top_corner;
 
             sprintf(size, "%d %d", model_length[0], model_length[1]);
