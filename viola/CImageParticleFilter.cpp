@@ -113,7 +113,7 @@ void CImageParticleFilter<DEPTH_TYPE>::update_particles_with_transition_model(co
         const float old_x = m_particles[i].d->x;
         const float old_y = m_particles[i].d->y;
         const double old_z = m_particles[i].d->z;
-        //TODO take care of this true and 0 * 
+        //TODO take care of this true and 0 *
         m_particles[i].d->x += (true || object_found) * (0 * dt * m_particles[i].d->vx) + (transition_model_std_xy * randomGenerator.drawGaussian1D_normalized());
         m_particles[i].d->y += (true || object_found) * (0 * dt * m_particles[i].d->vy) + (transition_model_std_xy * randomGenerator.drawGaussian1D_normalized());
         //m_particles[i].d->z  = object_found * (old_z);
@@ -377,7 +377,7 @@ float inv_range_fitting = 1.0f / (max_fitting - min_fitting);
     auto calculate_torso_particles = [&](const size_t i) {
         const ParticleData &particle = *(particles_valid_roi[i].get().d);
         const Eigen::Vector2i torso_particle = translate_2D_vector_in_3D_space(particle.x, particle.y, particle.z, HEAD_TO_TORSE_CENTER_VECTOR,
-                                                            registration->cameraMatrixColor, registration->lookupX, registration->lookupY);
+                                                            registration->cameraMatrix, registration->lookupX, registration->lookupY);
 
         const Eigen::Vector3i torso_particle_2D_D = Vector3i(torso_particle[0], torso_particle[1], particle.z);
 

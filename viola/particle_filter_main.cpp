@@ -222,6 +222,7 @@ int particle_filter()
      //CDisplayWindow image_hist_score_window ("score_window");
 
     CDisplayWindow person_mask_window ("person_mask");
+    CDisplayWindow flooded_mask_window ("flooded_mask");
 
 //#define VIEW_3D
 #ifdef VIEW_3D
@@ -285,7 +286,7 @@ int particle_filter()
     cv::BackgroundSubtractorMOG2 background_subtractor_depth;
     background_subtractor_depth.set("nmixtures", 3);
     cv::Mat background_mask_depth;
-
+    int n = 0;
     while (!mrpt::system::os::kbhit()) {
         uint64_t t0 = cv::getTickCount();
         if (counter == 0){
@@ -323,7 +324,14 @@ int particle_filter()
 
         float registration_t = (cv::getTickCount() - registration_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
-        background_subtractor_depth(depth_frame, background_mask_depth);
+        /*
+        float learningRate = -1;
+        if (n >= 10){
+            learningRate = 0;
+        }
+        n++;
+        */
+        background_subtractor_depth(depth_frame, background_mask_depth, learningRate);
         cv::erode(background_mask_depth, background_mask_depth, cv::Mat());
         cv::dilate(background_mask_depth, background_mask_depth, cv::Mat());
         cv::Mat background_mask_depth_inverse;
@@ -604,6 +612,7 @@ int particle_filter()
         }
 
         cv::Mat mask(10, 10, CV_8UC1);
+        cv::Mat flooded_mask(10, 10, CV_8UC1);
         cv::Mat display_mask(10, 10, CV_8UC1);
         if (trackers.states.size()){
             int mean_pixel_x, mean_pixel_y;
@@ -614,7 +623,8 @@ int particle_filter()
                       << depth_frame.rows << 'x' << depth_frame.cols << std::endl;
             */
 
-            mask = person_mask(trackers.states[0].x, trackers.states[0].y, trackers.states[0].z, color_frame, depth_frame, background_mask_depth, reg.cameraMatrix, reg.lookupX, reg.lookupY, color_display_frame, display_mask);
+            mask = person_mask(trackers.states[0].x, trackers.states[0].y, trackers.states[0].z, color_frame, depth_frame,
+                background_mask_depth, reg.cameraMatrix, reg.lookupX, reg.lookupY, color_display_frame, display_mask, flooded_mask);
 
             //markers.at<int32_t>() = 1;
 
@@ -629,7 +639,6 @@ int particle_filter()
         //cv::dilate(mask, mask, cv::Mat::ones(3, 3, CV_8UC1));
         //dist.convertTo(dist, CV_8UC1);
         //markers.convertTo(markers, CV_8UC3);
-        //imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_display_frame)));
         //imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(in_range_mask)));
         //imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(depth_frame)));
         imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(color_display_frame)));
@@ -641,6 +650,11 @@ int particle_filter()
         CImage person_mask_image;
         person_mask_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
         person_mask_window.showImage(person_mask_image);
+
+        imp_image_pointers.push_back(std::unique_ptr<IplImage>(new IplImage(flooded_mask)));
+        CImage flooded_mask_image;
+        flooded_mask_image.setFromIplImageReadOnly(imp_image_pointers.back().get());
+        flooded_mask_window.showImage(flooded_mask_image);
 
 #ifdef VIEW_3D
         //--- 3D view stuff

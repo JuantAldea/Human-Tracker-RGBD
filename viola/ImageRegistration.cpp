@@ -49,10 +49,10 @@ void ImageRegistration::initCalibration(const std::string &calib_path, const std
     }
 
     cameraMatrixLowRes = cameraMatrixColor.clone();
-    cameraMatrixLowRes.at<double>(0, 0) /= 2;
-    cameraMatrixLowRes.at<double>(1, 1) /= 2;
-    cameraMatrixLowRes.at<double>(0, 2) /= 2;
-    cameraMatrixLowRes.at<double>(1, 2) /= 2;
+    cameraMatrixLowRes.at<double>(0, 0) *= 0.5;
+    cameraMatrixLowRes.at<double>(1, 1) *= 0.5;
+    cameraMatrixLowRes.at<double>(0, 2) *= 0.5;
+    cameraMatrixLowRes.at<double>(1, 2) *= 0.5;
 
     depthRegHighRes->init(cameraMatrixColor, sizeColor, cameraMatrixIr, sizeIr, distortionIr, rotation, translation, 0.5f, maxDepth, -1);
     depthRegLowRes->init(cameraMatrixLowRes, sizeLowRes, cameraMatrixIr, sizeIr, distortionIr, rotation, translation, 0.5f, maxDepth, -1);

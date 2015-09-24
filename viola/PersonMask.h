@@ -1,9 +1,9 @@
 #include <algorithm>
 
-cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_frame, cv::Mat depth_frame, cv::Mat background_depth, cv::Mat cameraMatrix, cv::Mat lookupX, cv::Mat lookupY, cv::Mat &display, cv::Mat &display_mask)
+cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_frame, cv::Mat depth_frame,
+    cv::Mat background_depth, cv::Mat cameraMatrix,
+    cv::Mat lookupX, cv::Mat lookupY, cv::Mat &display, cv::Mat &display_mask, cv::Mat &flood_mask)
 {
-
-    //std::cout <<"SIZE " << depth_frame.rows << ' ' << depth_frame.cols << std::endl;
     using namespace Eigen;
 
     const float fx = cameraMatrix.at<double>(0, 0);
@@ -48,13 +48,14 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     cv::inRange(person_depth_roi, std::max(z - Z_TOLERANCE, 600.0f), z + Z_TOLERANCE, person_mask);
 
     //std::cout << person_depth_roi.type() << ' ' << person_mask.type() << std::endl;
-    //cv::Mat ones = cv::Mat::ones(background_depth.size(), background_depth.type());
-    //cv::Mat person_mask2;
-    //bitwise_and(background_depth, ones, person_mask2, person_mask);
+    cv::Mat ones = cv::Mat::ones(person_mask.size(), background_depth.type());
+    cv::Mat person_mask2 = cv::Mat::ones(background_depth.size(), background_depth.type());
+    bitwise_and(background_depth(person_rect), person_mask, person_mask2);
     display_mask = person_mask.clone();
     //person_mask = person_depth_roi;
+    person_mask = person_mask2;
 
-    //cv::Mat flood_mask = cv::Mat::zeros(person_mask.rows + 2, person_mask.cols + 2, CV_8UC1);
+
 
     float mean_x = 0;
     float mean_y = 0;
@@ -85,10 +86,9 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     Vector2i right = Vector2i(mean_pixel_x + (mean_pixel_x - left[0]), mean_pixel_y + (mean_pixel_y - left[1]));
     //const Vector3f point_3D_right = point_3D + (0.12., 0.0, 0.0);
     //cv::line(display, cv::Point(left[0], left[1]), cv::Point(right[0], right[1]), cv::Scalar(255, 0, 0), 3);
-    cv::Point offset;
-    cv::Size size;
-    person_depth_roi.locateROI(size, offset);
-
+    //cv::Point offset;
+    //cv::Size size;
+    //person_depth_roi.locateROI(size, offset);
     //cv::line(display, offset + cv::Point(left[0], left[1]), offset + cv::Point(right[0], right[1]), cv::Scalar(0), 3);
     //cv::ellipse(display, offset + cv::Point(mean_pixel_x, mean_pixel_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(255, 0, 0), -3, 8, 0);
 
@@ -151,11 +151,20 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     cv::line(display_mask, cv::Point(left[0], average_y), cv::Point(right[0], average_y), cv::Scalar(128), 5);
     cv::ellipse(display_mask, cv::Point(mean_pixel_x, average_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(128), -3, 50, 0);
 
+    cv::Rect bounding_box;
+    flood_mask = cv::Mat::zeros(person_mask.rows + 2, person_mask.cols + 2, CV_8UC1);
+    cv::floodFill(person_mask, flood_mask, cv::Point(mean_pixel_x, average_y), cv::Scalar(128), &bounding_box, cv::Scalar(5.0f), cv::Scalar(5.0f), cv::FLOODFILL_MASK_ONLY | ( 128 << 8 ));
 
-    //cv::Rect bounding_box;
-    //cv::floodFill(person_mask, flood_mask, cv::Point(x, y), cv::Scalar(128), &bounding_box, cv::Scalar(20.0f), cv::Scalar(20.0f), cv::FLOODFILL_MASK_ONLY);
+    cv::ellipse(flood_mask, cv::Point(x - person_rect.x, y - person_rect.y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(255), -3, 100, 0);
+    cv::ellipse(flood_mask, cv::Point(mean_pixel_x, average_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(64), -3, 50, 0);
+
     //cv::Mat zero_depth = cv::Mat::zeros(person_depth_roi.rows, person_depth_roi.cols, person_depth_roi.type());
+
     //cv::bitwise_not(person_mask, person_mask);
     //bitwise_and(person_depth_roi, zero_depth, person_depth_roi, in_range_mask);
-    return person_mask;
+    //return flood_mask;
+    cv::Mat mask = cv::Mat::zeros(depth_frame.size(), person_mask.type());
+    cv::Mat mask_region = mask(person_rect);
+    person_mask.copyTo(mask_region);
+    return mask;
 }

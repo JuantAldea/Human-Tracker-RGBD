@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
             Eigen::Vector2i top_corner, bottom_corner;
             std::tie(top_corner, bottom_corner) = project_model(Eigen::Vector2f(cxx, cyx), depth,
                 Eigen::Vector2f(X_SEMI_AXIS_METTERS, Y_SEMI_AXIS_METTERS),
-                reg.cameraMatrixColor, reg.lookupX, reg.lookupY);
+                reg.cameraMatrix, reg.lookupX, reg.lookupY);
             model_length2 = bottom_corner - top_corner;
 
             //sprintf(size, "%d %d %d %d", cxx, cyx, model_length2[0], model_length2[1]);

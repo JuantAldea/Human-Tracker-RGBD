@@ -142,9 +142,9 @@ void createTransformMatrix(float PtuHeight, float PtuPan, float PtuTilt,
     float dax = 0.06; //expressed in meters
     float day = 0.039116; //expressed in meters
     float dby = 0.071628;
-    float dcx = 0.0437134;
+    //float dcx = 0.0437134;
     float dcy = 0.04572;
-    float dcz = 0.02159;
+    //float dcz = 0.02159;
 
     TMatrix[0][0] = cos(panRadians);
     TMatrix[0][1] = sin(panRadians) * sin(tiltRadians);
@@ -190,7 +190,7 @@ int main(int argc, char **argv)
     PeopleTracker Tracker; //people tracker
     IplImage *rgbCameraImage, *toVideo, *hsvCameraImage, *auxGrey, *binForegorund,
              *colorMap = NULL; //OpenCV images
-    IplImage *imgFace, *halfImgFace, *mouthImg;
+    IplImage *imgFace, *halfImgFace;
     float positionX[MAXIMUMPERSONS][FRAMESPERPERSON], positionZ[MAXIMUMPERSONS][FRAMESPERPERSON];
     int waitKeyTime = 0; //waiting key time
     bool Finalizar = false, faceOpenCV;
@@ -198,11 +198,11 @@ int main(int argc, char **argv)
     boolean saveVideo = true;
     FuzzyMatlab closeFS, farFS;
     int headWidth, headHeight, goodHead;
-    CvSeq *detectedFaces, *detectedEyes, *detectedMouth;
-    CvRect *rectFace, *rectSmall, rectAux;
+    CvSeq *detectedFaces;
+    CvRect *rectFace, rectAux;
     int attentionClass, smileClass;
     SmileEstimator SmileEstimatorForFace;
-    pair<float, float> personPos, mapPos, headPos;
+    pair<float, float> personPos, mapPos;
     float *xyz, positionFaceX, positionFaceY, positionFaceZ;
     IplImage *binaryMask, *distanceMask, *colorMask, *smallFaceRGB,
              *smallFaceGrey;
@@ -214,8 +214,8 @@ int main(int argc, char **argv)
              *oldColorMask[MAXIMUMPERSONS][FRAMESPERPERSON];
     bool analyseGestures[MAXIMUMPERSONS], firstTime[MAXIMUMPERSONS];
     float speed, RA, biggestDistance;
-    int headx, heady, headlastx, firstheadxbinary, firstheadybinary, lastheadxbinary;
-    bool headFound, tempBool;
+    int headx, heady;
+    bool tempBool;
     unsigned char *oldptrbinary[MAXIMUMPERSONS][FRAMESPERPERSON];
     long numberOfArmPixelsBinary, numberOfArmPixelsDistance, numberOfArmPixelsBinaryHistory,
          numberOfArmPixelsDistanceHistory;
@@ -251,7 +251,6 @@ int main(int argc, char **argv)
         hsvCameraImage = cvCreateImage(cvSize(StImage->getWidth(), StImage->getHeight()), 8, 3);
         auxGrey = cvCreateImage(cvSize(StImage->getWidth(), StImage->getHeight()), 8, 1);
         binForegorund = cvCreateImage(cvSize(StImage->getWidth(), StImage->getHeight()), 8, 1);
-        mouthImg = cvCreateImage(cvSize(25, 15), 8, 3);
 
 
         ///Write to files
@@ -370,8 +369,8 @@ int main(int argc, char **argv)
                 for (int person = 0; person < Tracker.getNumPeopleBeingTracked();
                         person++, indexWidth += 2 * PMaskExtractor.getNormalizedColorMask()->width) {
                     personPos = PVMaps.fromMapPosToWorldPos(Tracker.getMeanEstimatedPositions()[person]);
-                    PMaskExtractor.createMask(StImage, personPos, foreGround, 0.5,
-                                              2.3); // Mascara para detection movimiento brazos.
+                    // Mascara para detection movimiento brazos.
+                    PMaskExtractor.createMask(StImage, personPos, foreGround, 0.5, 2.3);
 
                     // From DEA Work. Create and Update history of position and speed of person
                     binaryMask = PMaskExtractor.getBinaryMask();
@@ -470,8 +469,8 @@ int main(int argc, char **argv)
                                                  LEARNINGRATESMILE); // Version con "learning rate" por lo de tener en cuenta la historia. Si no nos interesa hay que desactivar.
                             break;
                         case 2: //High Smile
-                            smileLevel[person] = smileLevel[person] * (1 - LEARNINGRATESMILE) +
-                                                 LEARNINGRATESMILE; // Version con "learning rate" por lo de tener en cuenta la historia. Si no nos interesa hay que desactivar.
+                             // Version con "learning rate" por lo de tener en cuenta la historia. Si no nos interesa hay que desactivar.
+                            smileLevel[person] = smileLevel[person] * (1 - LEARNINGRATESMILE) + LEARNINGRATESMILE;
                             break;
                         }
                         if (smileClass == -1) {
@@ -487,7 +486,6 @@ int main(int argc, char **argv)
                     }
 
                     if (!faceOpenCV) { // Values come from tracker porque ninguna cara detectada por openCV parece corresponder a una persona que esta siendo seguida
-                        headPos.first = -1;
                         if (PMaskExtractor.createMask(StImage, personPos, foreGround, 0.5, 2.3)) {
                             guopencv::Utilities::copyMakeBorder2(PMaskExtractor.getNormalizedColorMask(),
                                                                  ImgComposer.getLastComposed(), cvPoint(indexWidth, 0), cvScalar(0, 0, 255), 1, 8, "Depth Mask",
@@ -496,11 +494,11 @@ int main(int argc, char **argv)
                                                                  ImgComposer.getLastComposed(),
                                                                  cvPoint(indexWidth + PMaskExtractor.getNormalizedColorMask()->width, 0), cvScalar(0, 0, 255),
                                                                  1, 8, "Color Mask", 0.4);
-                            headPos = PMaskExtractor.getPersonHeadPosition();
-                            headWidth = (int)(96.0 / personPos.second);
-                            headHeight = (int)(115.0 / personPos.second);
+                            pair<float, float> headPos = PMaskExtractor.getPersonHeadPosition();
                             rectFace->x = headPos.first;
                             rectFace->y = headPos.second;
+                            headWidth = (int)(96.0 / personPos.second);
+                            headHeight = (int)(115.0 / personPos.second);
                             rectFace->width = headWidth;
                             rectFace->height = headHeight;
                             headPos.first += headWidth / 2;
