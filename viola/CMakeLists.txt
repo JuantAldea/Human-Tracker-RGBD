@@ -112,8 +112,8 @@ ADD_EXECUTABLE(smiletest SmileTest.cpp)
 #ADD_EXECUTABLE(hog peopledetect.cpp)
 #ADD_EXECUTABLE(Boost-normal Boost-normal.cpp)
 ADD_EXECUTABLE(model_projections_precalculator model_projections_precalculator.cpp)
-ADD_EXECUTABLE(kmeans kmeans.cpp)
-ADD_EXECUTABLE(watershed watershed.cpp)
+#ADD_EXECUTABLE(kmeans kmeans.cpp)
+#ADD_EXECUTABLE(watershed watershed.cpp)
 
 FIND_PACKAGE(OpenCL REQUIRED)
 FIND_PACKAGE(Boost REQUIRED system serialization)
@@ -189,7 +189,7 @@ TARGET_LINK_LIBRARIES(particle_filter_main
     ModelParameters
     dlib
 )
-
+#[[
 TARGET_LINK_LIBRARIES(kmeans
     ${OpenCV_LIBS}
     ${DEPTH_REGISTRATION_LIBRARY}
@@ -199,7 +199,7 @@ TARGET_LINK_LIBRARIES(kmeans
 TARGET_LINK_LIBRARIES(watershed
     ${OpenCV_LIBS}
 )
-
+]]
 #[[
 TARGET_LINK_LIBRARIES(image_registration_example
     ${OpenCV_LIBS}

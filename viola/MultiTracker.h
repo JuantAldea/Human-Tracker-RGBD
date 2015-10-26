@@ -160,7 +160,7 @@ struct MultiTracker {
                 particles.set_object_missing();
                 //estimated_new_state = estimated_state;
 
-                particles.init_particles(NUM_PARTICLES * 3,
+                particles.init_particles(NUM_PARTICLES,
                                   make_pair(estimated_state.x, estimated_state.radius_x * 2),
                                   make_pair(estimated_state.y, estimated_state.radius_y * 2),
                                   make_pair(float(estimated_state.z), 100.f),
@@ -292,8 +292,8 @@ struct MultiTracker {
                 cv::Point textOrg(estimated_state.x - textSize.width * 0.5f, estimated_state.y - textSize.height);
                 cv::Point textOrg2 = textOrg + cv::Point(0, textSize.height * 2.5);
                 //cv::Point textOrg(textSize.width, textSize.height);
-                putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
-                putText(color_display_frame, oss2.str(), textOrg2, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+                //putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+                //putText(color_display_frame, oss2.str(), textOrg2, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
             }
 
             double max_w = -100;
@@ -333,8 +333,7 @@ struct MultiTracker {
             cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
             cv::Point textOrg(0, textSize.height + 10);
             //cv::Point textOrg(textSize.width, textSize.height);
-            putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0),
-                    thickness, 8);
+            //putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
         }
     };
 };

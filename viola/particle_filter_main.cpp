@@ -43,7 +43,7 @@ IGNORE_WARNINGS_POP
 
 #include "PersonMask.h"
 
-#define USE_HALF_RES
+//#define USE_HALF_RES
 
 using namespace mrpt;
 using namespace mrpt::bayes;
@@ -193,7 +193,7 @@ int particle_filter()
         std::vector<std::string>{"ellipses_0.150000x0.250000.bin", "ellipses_0.300000x0.200000.bin"});
 #else
     EllipseStashLoader ellipses(reg, std::vector<BodyPart> {BodyPart::HEAD, BodyPart::TORSO},
-        std::vector<std::string>{"ellipses_half_0.150000x0.250000.bin", "ellipses_half_0.300000x0.200000.bin"});
+        std::vector<std::string>{"ellipses_h_0.150000x0.250000.bin", "ellipses_h_0.300000x0.200000.bin"});
 #endif
 
     cv::Mat color_frame;
@@ -324,8 +324,8 @@ int particle_filter()
 
         float registration_t = (cv::getTickCount() - registration_t0) / double(cv::getTickFrequency());
         std::cout << "TIMES_REGISTRATION " << registration_t << std::endl;
-        /*
         float learningRate = -1;
+        /*
         if (n >= 10){
             learningRate = 0;
         }
@@ -608,7 +608,7 @@ int particle_filter()
             int baseline = 0;
             cv::Size textSize = cv::getTextSize(oss.str(), fontFace, fontScale, thickness, &baseline);
             cv::Point textOrg(color_display_frame.cols - 100, color_display_frame.cols - textSize.height * 0.5f - 50);
-            putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
+            //putText(color_display_frame, oss.str(), textOrg, fontFace, fontScale, cv::Scalar(255, 255, 0), thickness, 8);
         }
 
         cv::Mat mask(10, 10, CV_8UC1);
@@ -622,10 +622,10 @@ int particle_filter()
                       << background_mask_depth.rows << 'x' << background_mask_depth.cols
                       << depth_frame.rows << 'x' << depth_frame.cols << std::endl;
             */
-
+            
             mask = person_mask(trackers.states[0].x, trackers.states[0].y, trackers.states[0].z, color_frame, depth_frame,
                 background_mask_depth, reg.cameraMatrix, reg.lookupX, reg.lookupY, color_display_frame, display_mask, flooded_mask);
-
+            
             //markers.at<int32_t>() = 1;
 
             //cv::floodFill(depthf, mask, cv::Point(x, y), cv::Scalar(128), &bounding_box, cv::Scalar(20.0f), cv::Scalar(20.0f), cv::FLOODFILL_MASK_ONLY);

@@ -216,7 +216,7 @@ int main(int argc, char **argv)
     float speed, RA, biggestDistance;
     int headx, heady;
     bool tempBool;
-    unsigned char *oldptrbinary[MAXIMUMPERSONS][FRAMESPERPERSON];
+    const unsigned char *oldptrbinary[MAXIMUMPERSONS][FRAMESPERPERSON];
     long numberOfArmPixelsBinary, numberOfArmPixelsDistance, numberOfArmPixelsBinaryHistory,
          numberOfArmPixelsDistanceHistory;
     long numberDifferentBinaryPixels, numberDifferentRedPixels, numberDifferentBluePixels,
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
     float attentionLevel[MAXIMUMPERSONS], movementArms[MAXIMUMPERSONS], smileLevel[MAXIMUMPERSONS],
           occludedPixelsRatio[MAXIMUMPERSONS], finalInterest[MAXIMUMPERSONS];
     FuzzyMatlab FMRAP, FMRAM;
-    float *oldptrdistance[MAXIMUMPERSONS][FRAMESPERPERSON];
+    const float *oldptrdistance[MAXIMUMPERSONS][FRAMESPERPERSON];
     int occludedPixels[MAXIMUMPERSONS];
     float pertenenciaLejos, dist, minDist;
     int numPixels, frame;
@@ -545,16 +545,16 @@ int main(int argc, char **argv)
                                 oldptrdistance[person][x] = (float *)(oldDistanceMask[person][x]->imageData +
                                                                       oldDistanceMask[person][x]->widthStep * line);
                             }
-                            for (int column = 0; column < binaryMask->width;
-                                    column++) { // numero de colonas de la imagne...
+
+                            // numero de colonas de la imagne...
+                            for (int column = 0; column < binaryMask->width; column++) {
                                 // vamos a ver cuantos pixels que apartienen a un brazo(s) hay en el entorno de la persona para el frame actual
                                 if (((int)(*oldptrbinary[person][0])) != 0) { // current binary image
                                     numberOfPixels++;
-                                    if ((((float)((column - CENTERBINARYPICTUREX) * (column - CENTERBINARYPICTUREX)) / (float)(
-                                                GESTUREMINIMUMX * GESTUREMINIMUMX)) + ((float)((-line - CENTERBINARYPICTUREY) *
-                                                        (-line - CENTERBINARYPICTUREY)) / (float)(GESTUREMINIMUMY * GESTUREMINIMUMY)) > 1.0)
-                                            && (((float)((column - CENTERBINARYPICTUREX) * (column - CENTERBINARYPICTUREX)) / (float)(
-                                                     GESTUREMAXIMUMX * GESTUREMAXIMUMX)) + ((float)((-line - CENTERBINARYPICTUREY) *
+                                    if ((
+                                        (((column - CENTERBINARYPICTUREX) * (column - CENTERBINARYPICTUREX)) / float(GESTUREMINIMUMX * GESTUREMINIMUMX)) +
+                                        (((-line  - CENTERBINARYPICTUREY) * (-line - CENTERBINARYPICTUREY)) / float(GESTUREMINIMUMY * GESTUREMINIMUMY)) > 1.0)
+                                    &&  ((((column - CENTERBINARYPICTUREX) * (column - CENTERBINARYPICTUREX)) / (float)(GESTUREMAXIMUMX * GESTUREMAXIMUMX)) + ((float)((-line - CENTERBINARYPICTUREY) *
                                                              (-line - CENTERBINARYPICTUREY)) / (float)(GESTUREMAXIMUMY * GESTUREMAXIMUMY)) < 1.0)
                                             && line < 70) {
                                         numberOfArmPixelsBinary++;
