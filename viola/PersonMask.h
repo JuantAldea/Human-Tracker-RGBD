@@ -12,7 +12,7 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     const float cy = cameraMatrix.at<double>(1, 2);
 
     float Z_TOLERANCE = 750.0;
-    Vector3f translation_upper_left(-1.0, -1, 0.0);
+    Vector3f translation_upper_left(-1.0, -1.0, 0.0);
     Vector3f translation_lower_right(1.0, 0.5, 0.0);
 
     Eigen::Vector3f point_3D = point_3D_reprojection(x, y, z, lookupX, lookupY);
@@ -24,7 +24,10 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
 
     const Vector3f point_3D_lower_right = point_3D + translation_lower_right;
     Vector2i lower_right = point_3D_projection(point_3D_lower_right, fx, fy, cx, cy);
-
+    
+    const int pixels_per_vertical_metter = lower_right[1] - upper_left[1];
+    const int pixels_per_horizontal_metter = (lower_right[0] - upper_left[0]) * 0.5;
+    
     lower_right[0] = std::max(0, std::min(rgb_frame.cols - 1, lower_right[0]));
     lower_right[1] = std::max(0, std::min(rgb_frame.rows - 1, lower_right[1]));
 
@@ -151,20 +154,51 @@ cv::Mat person_mask(const float x, const float y, const float z, cv::Mat rgb_fra
     cv::line(display_mask, cv::Point(left[0], average_y), cv::Point(right[0], average_y), cv::Scalar(128), 5);
     cv::ellipse(display_mask, cv::Point(mean_pixel_x, average_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(128), -3, 50, 0);
 
-    cv::Rect bounding_box;
-    flood_mask = cv::Mat::zeros(person_mask.rows + 2, person_mask.cols + 2, CV_8UC1);
-    cv::floodFill(person_mask, flood_mask, cv::Point(mean_pixel_x, average_y), cv::Scalar(128), &bounding_box, cv::Scalar(5.0f), cv::Scalar(5.0f), cv::FLOODFILL_MASK_ONLY | ( 128 << 8 ));
+    //cv::Rect bounding_box;
+    //flood_mask = cv::Mat::zeros(person_mask.rows + 2, person_mask.cols + 2, CV_8UC1);
+    //cv::floodFill(person_mask, flood_mask, cv::Point(mean_pixel_x, average_y), cv::Scalar(128), &bounding_box, cv::Scalar(5.0f), cv::Scalar(5.0f), cv::FLOODFILL_MASK_ONLY | ( 128 << 8 ));
 
-    cv::ellipse(flood_mask, cv::Point(x - person_rect.x, y - person_rect.y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(255), -3, 100, 0);
-    cv::ellipse(flood_mask, cv::Point(mean_pixel_x, average_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(64), -3, 50, 0);
+    //cv::ellipse(flood_mask, cv::Point(x - person_rect.x, y - person_rect.y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(255), -3, 100, 0);
+    //cv::ellipse(flood_mask, cv::Point(mean_pixel_x, average_y), cv::Size(10, 10), 0, 0, 360, cv::Scalar(64), -3, 50, 0);
 
     //cv::Mat zero_depth = cv::Mat::zeros(person_depth_roi.rows, person_depth_roi.cols, person_depth_roi.type());
 
     //cv::bitwise_not(person_mask, person_mask);
     //bitwise_and(person_depth_roi, zero_depth, person_depth_roi, in_range_mask);
     //return flood_mask;
+    //for (int i = 0; i <)
     cv::Mat mask = cv::Mat::zeros(depth_frame.size(), person_mask.type());
     cv::Mat mask_region = mask(person_rect);
+    //cv::line(person_mask, cv::Point(person_mask.cols * 0.5, 0), cv::Point(person_mask.cols * 0.5, person_mask.rows - 1), cv::Scalar(128));
+
+    //centro
+    cv::line(person_mask, cv::Point(x - person_rect.x, person_mask.rows - 1 - pixels_per_vertical_metter * 0.5), cv::Point(x - person_rect.x, person_mask.rows - 1), cv::Scalar(128));
+    
+    //extremos
+    cv::line(person_mask, 
+        cv::Point(x - person_rect.x - pixels_per_horizontal_metter * 0.5, y - person_rect.y - pixels_per_vertical_metter * 0.25), 
+        cv::Point(x - person_rect.x - pixels_per_horizontal_metter * 0.5, y - person_rect.y + pixels_per_vertical_metter * 0.25), cv::Scalar(128));
+
+    cv::line(person_mask, 
+        cv::Point(x - person_rect.x + pixels_per_horizontal_metter * 0.5, y - person_rect.y - pixels_per_vertical_metter * 0.25), 
+        cv::Point(x - person_rect.x + pixels_per_horizontal_metter * 0.5, y - person_rect.y + pixels_per_vertical_metter * 0.25), cv::Scalar(128));
+    
+    //medios 
+    cv::line(person_mask, 
+        cv::Point(x - person_rect.x - pixels_per_horizontal_metter * 0.25, y - person_rect.y - pixels_per_vertical_metter * 0.25), 
+        cv::Point(x - person_rect.x - pixels_per_horizontal_metter * 0.25, y - person_rect.y + pixels_per_vertical_metter * 0.25), cv::Scalar(128));
+
+    cv::line(person_mask, 
+        cv::Point(x - person_rect.x + pixels_per_horizontal_metter * 0.25, y - person_rect.y - pixels_per_vertical_metter * 0.25), 
+        cv::Point(x - person_rect.x + pixels_per_horizontal_metter * 0.25, y - person_rect.y + pixels_per_vertical_metter * 0.25), cv::Scalar(128));
+    
+    //diagonales
+    cv::line(person_mask, cv::Point(0, 0), cv::Point(person_mask.cols, person_mask.rows), cv::Scalar(128));
+    cv::line(person_mask, cv::Point(0, person_mask.rows), cv::Point(person_mask.cols, 0), cv::Scalar(128));
+
+    //cv::line(person_mask, cv::Point(person_mask.cols * 0.5, person_mask.pixels_per_vertical_metter), cv::Point(person_mask.cols * 0.5, person_mask.cols - 1), cv::Scalar(128));
     person_mask.copyTo(mask_region);
+    cv::rectangle(mask, person_rect, cv::Scalar(128));
+    //cv::line(mask, cv::Point(mask.cols * 0.5, 0), cv::Point(mask.cols * 0.5, mask.cols - 1), cv::Scalar(128));
     return mask;
 }
